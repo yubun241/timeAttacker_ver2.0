@@ -10,6 +10,21 @@ window.addEventListener('error', function(e) {
   }
 });
 
+// ── 即実行: 旧 Service Worker と全キャッシュを強制クリア ──
+// app.js 読み込み時に即座に実行（IIFE 内のエラーに依存しない）
+(function () {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      regs.forEach(function (r) { r.unregister(); });
+    }).catch(function () {});
+  }
+  if (window.caches && caches.keys) {
+    caches.keys().then(function (keys) {
+      keys.forEach(function (k) { caches.delete(k); });
+    }).catch(function () {});
+  }
+})();
+
 /* ============================================================
    TIME ATTACKER  (Ver.2.0 / 藤井工藝)
    GPS time-attack PWA with map-based line drawing
@@ -3189,22 +3204,13 @@ window.addEventListener('error', function(e) {
     showScreen('warning');
   }, 2000);
 
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      // ── 一時リカバリ: 旧 SW を全解除 + 全キャッシュをクリア ──
-      // 古い app.js がキャッシュから返される問題を強制解消
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        regs.forEach(r => r.unregister());
-      }).then(() => {
-        if (window.caches && caches.keys) {
-          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
-        }
-      }).then(() => {
-        // 再登録は次回起動時に行う（今回はリカバリのみ）
-        navigator.serviceWorker.register('sw.js').catch(() => {});
-      });
-    });
-  }
+  // ── SW 再登録は一時的に無効化（デバッグのため） ──
+  // 動作確認できたら下記のコメントを外す
+  // if ('serviceWorker' in navigator) {
+  //   window.addEventListener('load', () => {
+  //     navigator.serviceWorker.register('sw.js').catch(() => {});
+  //   });
+  // }
 
   // Re-acquire wake lock on visibility return
   document.addEventListener('visibilitychange', () => {
