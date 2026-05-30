@@ -2584,6 +2584,26 @@ window.addEventListener('error', function(e) {
     function tick() {
       if (state.view !== 'drive') return;
 
+      // ─── 横画面オーバーレイがアクティブな間は、縦画面DOM更新を全スキップ
+      //     (Landscape側で別途rAFループが回って必要な値だけ画面に反映される)
+      //     ただし、データ取得 (state.* への書き込み) は GPS/motion handler 側で
+      //     継続するため、CSV記録やラップ判定は止まらない。
+      // ─────────────────────────────────────────────────────────────
+      if (typeof Landscape !== 'undefined' && Landscape.isActive && Landscape.isActive()) {
+        // 必要最小限の処理だけ実行: セッション時間切れ判定とラップ完了
+        const now = Date.now();
+        const c = getActiveCourse();
+        if (state.driveActive && c?.duration > 0 && state.driveStartT != null) {
+          const remaining = c.duration * 1000 - (now - state.driveStartT);
+          if (remaining <= 0) {
+            finishSession();
+            toast('⏱ セッション時間終了');
+          }
+        }
+        state.rafId = requestAnimationFrame(tick);
+        return;
+      }
+
       const now = Date.now();
       const c = getActiveCourse();
 
@@ -3203,7 +3223,378 @@ window.addEventListener('error', function(e) {
     showScreen('warning');
   }, 2000);
 
-  // ── SW 再登録は一時的に無効化（デバッグのため） ──
+  // ============================================================
+  // 横画面オーバーレイ (Landscape Mode) — drive 画面専用
+  //   ・走行中(driveActive)は向き変更を無視 → 開始時の向きで固定
+  //   ・走行停止中は向き変更で自動切替
+  //   ・横画面アクティブ時は縦画面DOM更新スキップ(逆も同様)で負荷軽減
+  // ============================================================
+  const Landscape = (() => {
+    let active = false;          // 現在横画面オーバーレイが表示中か
+    let lockedOrientation = null; // 走行中ロック: null | 'portrait' | 'landscape'
+    let rafId = null;
+    let vizMoved = false;        // course-map / g-ball を移設したか
+    let mgView = 'map';          // 右上ボックス: 'map' | 'gball'
+
+    // ── スタイル注入 ──────────────────────────────────────
+    function injectStyle() {
+      if (document.getElementById('pta-ls-css')) return;
+      const s = document.createElement('style');
+      s.id = 'pta-ls-css';
+      s.textContent = `
+#pta-ls{display:none;position:fixed;inset:0;background:#0a0c10;z-index:2000;
+  flex-direction:column;color:#e0e6f0;font-family:'IBM Plex Sans JP',sans-serif;}
+body.pta-ls-on #pta-ls{display:flex !important;}
+body.pta-ls-on #screen-drive .topbar,
+body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
+
+#pta-ls-main{flex:1;display:flex;min-height:0;overflow:hidden;width:100%;}
+
+/* 左カラム: 操作系 */
+#pta-ls-left{width:150px;flex-shrink:0;display:flex;flex-direction:column;
+  padding:10px 12px;gap:10px;border-right:1px solid #1c2230;}
+#pta-ls-hdr{display:flex;align-items:flex-start;gap:8px;}
+.pta-ls-bk{background:none;border:1px solid #2a3040;border-radius:8px;
+  color:#8892a0;padding:4px 10px;font:18px sans-serif;cursor:pointer;line-height:1.2;}
+.pta-ls-bk:active{background:#1a2030;}
+.pta-ls-cn{font:bold 13px sans-serif;color:#e0e6f0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:100px;}
+.pta-ls-cs{font:11px sans-serif;color:#4fc3f7;margin-top:2px;}
+#pta-ls-ss{width:100%;padding:18px 0;border-radius:10px;border:none;
+  font:bold 19px sans-serif;cursor:pointer;background:#22aa44;color:#fff;
+  letter-spacing:.1em;transition:background .2s;}
+#pta-ls-ss.stop{background:#cc3333;}
+.pta-ls-lbtn{width:100%;background:#12161e;border:1px solid #2a3040;border-radius:10px;
+  color:#9aa4b2;padding:11px 0;font:bold 13px sans-serif;letter-spacing:.05em;
+  cursor:pointer;text-align:center;}
+.pta-ls-lbtn:active{background:#1a2030;}
+.pta-ls-gap{flex:1;}
+
+/* 中央カラム: タイマー */
+#pta-ls-center{flex:1;display:flex;flex-direction:column;justify-content:center;
+  padding:8px 16px;min-width:0;overflow:hidden;}
+#pta-ls-brand{font:bold 28px "Hiragino Mincho ProN","YuMincho",serif;
+  color:rgba(255,185,0,.78);letter-spacing:.32em;text-align:center;
+  margin-bottom:6px;text-shadow:0 1px 10px rgba(255,160,0,.4);}
+#pta-ls-seclbl{font:12px sans-serif;letter-spacing:.22em;color:#ffb000;
+  text-align:center;margin-bottom:4px;}
+#pta-ls-timer{font:bold clamp(56px,11vw,108px) "IBM Plex Mono",monospace;
+  color:#ffb000;line-height:1;text-align:center;white-space:nowrap;
+  letter-spacing:-0.02em;}
+#pta-ls-nextsec{display:flex;flex-direction:column;align-items:center;
+  margin-top:14px;padding-top:10px;border-top:1px solid #1c2230;}
+#pta-ls-nextsec-lbl{font:11px sans-serif;letter-spacing:.18em;color:#7a8499;}
+#pta-ls-nsval{font:bold 28px "IBM Plex Mono",monospace;color:#ffb000;
+  margin-top:4px;line-height:1;}
+#pta-ls-frl{display:flex;width:100%;justify-content:space-around;
+  margin-top:14px;padding-top:10px;border-top:1px solid #1c2230;}
+.pta-ls-slot{display:flex;flex-direction:column;gap:4px;align-items:center;flex:1;}
+.pta-ls-sl{font:10px sans-serif;letter-spacing:.16em;color:#7a8499;}
+.pta-ls-sv{font:bold 22px "IBM Plex Mono",monospace;color:#e0e6f0;}
+.pta-ls-sv.acc{color:#ffb000;}
+
+/* 右カラム */
+#pta-ls-right{width:260px;flex-shrink:0;display:flex;flex-direction:column;
+  padding:10px 12px;gap:8px;border-left:1px solid #1c2230;}
+#pta-ls-mapbox{position:relative;width:100%;flex:1 1 0;min-height:0;
+  background:#0d1118;border:1px solid #1c2230;border-radius:10px;overflow:hidden;}
+#pta-ls-mapbox .course-map-cell,#pta-ls-mapbox .gball-cell{
+  position:absolute !important;inset:0 !important;
+  width:100% !important;height:100% !important;
+  max-width:none !important;min-width:0 !important;margin:0 !important;
+  aspect-ratio:auto !important;border-radius:10px;}
+#pta-ls-mapbox canvas{width:100% !important;height:100% !important;display:block;}
+#pta-ls-mapbox .g-cal-btn,#pta-ls-mapbox #btn-g-cal{display:none !important;}
+#pta-ls-mapbox .course-map-legend{bottom:6px;right:6px;top:auto !important;
+  font-size:10px;gap:8px;opacity:.85;}
+#pta-ls-mgtoggle{display:flex;gap:6px;flex-shrink:0;}
+.pta-ls-mgbtn{flex:1;background:#12161e;border:1px solid #2a3040;border-radius:10px;
+  color:#9aa4b2;padding:10px 0;font:bold 13px sans-serif;cursor:pointer;}
+.pta-ls-mgbtn.on{background:#1a3a5c;border-color:#2a6c9c;color:#4fc3f7;}
+.pta-ls-info{display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding:4px 6px;}
+.pta-ls-il{font:11px sans-serif;letter-spacing:.16em;color:#7a8499;}
+.pta-ls-iv{font:bold 38px "IBM Plex Mono",monospace;color:#e0e6f0;line-height:1;}
+`;
+      document.head.appendChild(s);
+    }
+
+    // ── DOM 構築 ──────────────────────────────────────────
+    function buildOverlay() {
+      if (document.getElementById('pta-ls')) return;
+      injectStyle();
+      const ls = document.createElement('div');
+      ls.id = 'pta-ls';
+      ls.innerHTML = `
+<div id="pta-ls-main">
+  <div id="pta-ls-left">
+    <div id="pta-ls-hdr">
+      <button class="pta-ls-bk" id="pta-ls-bk">‹</button>
+      <div>
+        <div id="pta-ls-cn" class="pta-ls-cn">--</div>
+        <div id="pta-ls-cs" class="pta-ls-cs">--</div>
+      </div>
+    </div>
+    <button id="pta-ls-ss">START</button>
+    <button class="pta-ls-lbtn" id="pta-ls-csv">CSV 出力</button>
+    <button class="pta-ls-lbtn" id="pta-ls-dbg">DBG</button>
+    <button class="pta-ls-lbtn" id="pta-ls-zero">ZERO</button>
+    <button class="pta-ls-lbtn" id="pta-ls-set">設定</button>
+    <div class="pta-ls-gap"></div>
+  </div>
+  <div id="pta-ls-center">
+    <div id="pta-ls-brand">藤井工藝</div>
+    <div id="pta-ls-seclbl">SECTOR 1</div>
+    <div id="pta-ls-timer">00:00.000</div>
+    <div id="pta-ls-nextsec">
+      <span id="pta-ls-nextsec-lbl">TO NEXT SECTOR</span>
+      <span id="pta-ls-nsval">--:--.--</span>
+    </div>
+    <div id="pta-ls-frl">
+      <div class="pta-ls-slot">
+        <div class="pta-ls-sl">FINISH</div>
+        <div id="pta-ls-fin" class="pta-ls-sv">--:--.--</div>
+      </div>
+      <div class="pta-ls-slot">
+        <div class="pta-ls-sl">RECORD</div>
+        <div id="pta-ls-rec" class="pta-ls-sv acc">--:--.--</div>
+      </div>
+      <div class="pta-ls-slot">
+        <div class="pta-ls-sl">LAST</div>
+        <div id="pta-ls-lst" class="pta-ls-sv">--:--.--</div>
+      </div>
+    </div>
+  </div>
+  <div id="pta-ls-right">
+    <div id="pta-ls-mapbox"></div>
+    <div id="pta-ls-mgtoggle">
+      <button class="pta-ls-mgbtn on" id="pta-ls-mg-map">MAP</button>
+      <button class="pta-ls-mgbtn" id="pta-ls-mg-g">G-ball</button>
+    </div>
+    <div class="pta-ls-info">
+      <span class="pta-ls-il">SECTOR</span>
+      <span class="pta-ls-iv" id="pta-ls-sec">1</span>
+    </div>
+    <div class="pta-ls-info">
+      <span class="pta-ls-il">LAP</span>
+      <span class="pta-ls-iv" id="pta-ls-lap">0</span>
+    </div>
+  </div>
+</div>`;
+      document.body.appendChild(ls);
+
+      // ボタン委譲: 縦画面DOMのクリックを発火させる
+      const click = (sid, did) => {
+        const el = document.getElementById(sid);
+        if (el) el.addEventListener('click', () => {
+          const t = document.getElementById(did);
+          if (t) t.click();
+        });
+      };
+      click('pta-ls-bk',   'btn-exit-drive');     // 戻るは exit-drive
+      click('pta-ls-csv',  'btn-export-csv');
+      click('pta-ls-dbg',  'btn-dbg-portrait');
+      click('pta-ls-zero', 'btn-g-cal');
+      click('pta-ls-set',  'btn-open-settings');
+      document.getElementById('pta-ls-ss').addEventListener('click', () => {
+        const t = document.getElementById('btn-start-stop');
+        if (t) t.click();
+      });
+
+      // 戻るボタン: data-action="exit-drive" の要素を探す
+      document.getElementById('pta-ls-bk').addEventListener('click', () => {
+        const t = document.querySelector('[data-action="exit-drive"]');
+        if (t) t.click();
+      });
+
+      // MAP / G-ball 切替
+      document.getElementById('pta-ls-mg-map').addEventListener('click', () => setMGView('map'));
+      document.getElementById('pta-ls-mg-g').addEventListener('click', () => setMGView('gball'));
+
+      // ResizeObserver でキャンバス寸法を確実に再計算
+      try {
+        const box = document.getElementById('pta-ls-mapbox');
+        if (box && typeof ResizeObserver !== 'undefined') {
+          new ResizeObserver(() => { if (active) resizeViz(); }).observe(box);
+        }
+      } catch (e) {}
+    }
+
+    // ── course-map + g-ball を右上ボックスへ移設 / 復元 ──────
+    function moveViz(to) {
+      const gcell = document.querySelector('.gball-cell');
+      const mcell = document.querySelector('.course-map-cell');
+      if (to && !vizMoved) {
+        const box = document.getElementById('pta-ls-mapbox');
+        if (!box) return;
+        if (gcell) { gcell._op = gcell.parentNode; gcell._on = gcell.nextSibling; box.appendChild(gcell); }
+        if (mcell) { mcell._op = mcell.parentNode; mcell._on = mcell.nextSibling; box.appendChild(mcell); }
+        vizMoved = true;
+        setMGView(mgView);
+        setTimeout(resizeViz, 200);
+      } else if (!to && vizMoved) {
+        const rst = (el) => { if (!el) return;
+          el.style.display = el.style.opacity = el.style.zIndex = el.style.pointerEvents = ''; };
+        if (mcell && mcell._op) { mcell._op.insertBefore(mcell, mcell._on || null); rst(mcell); delete mcell._op; delete mcell._on; }
+        if (gcell && gcell._op) { gcell._op.insertBefore(gcell, gcell._on || null); rst(gcell); delete gcell._op; delete gcell._on; }
+        vizMoved = false;
+        try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+      }
+    }
+
+    // ── MAP/G-ball 切替: display 切替ではなく opacity+zIndex で常時レイアウト保持 ──
+    function setMGView(view) {
+      mgView = view;
+      const gcell = document.querySelector('.gball-cell');
+      const mcell = document.querySelector('.course-map-cell');
+      const btnM = document.getElementById('pta-ls-mg-map');
+      const btnG = document.getElementById('pta-ls-mg-g');
+      const show = (el) => { if (el) { el.style.opacity = '1'; el.style.zIndex = '2'; el.style.pointerEvents = 'auto'; } };
+      const hide = (el) => { if (el) { el.style.opacity = '0'; el.style.zIndex = '1'; el.style.pointerEvents = 'none'; } };
+      if (view === 'map') {
+        show(mcell); hide(gcell);
+        if (btnM) btnM.classList.add('on');
+        if (btnG) btnG.classList.remove('on');
+      } else {
+        show(gcell); hide(mcell);
+        if (btnG) btnG.classList.add('on');
+        if (btnM) btnM.classList.remove('on');
+      }
+      const kick = () => { try { window.dispatchEvent(new Event('resize')); } catch (e) {} };
+      requestAnimationFrame(() => requestAnimationFrame(kick));
+      setTimeout(kick, 120);
+      setTimeout(resizeViz, 80);
+    }
+
+    // ── キャンバス寸法を再計算 ─────────────────────────────
+    function resizeViz() {
+      const box = document.getElementById('pta-ls-mapbox');
+      if (!box) return;
+      const r = box.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      const sz = Math.round(Math.max(r.width, r.height, 80));
+      const cv = document.getElementById('gball-canvas');
+      if (cv) { cv.width = cv.height = sz; }
+      try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+      try {
+        if (state.courseMap && typeof state.courseMap.resize === 'function') {
+          state.courseMap.resize();
+          if (typeof state.courseMap.draw === 'function') state.courseMap.draw();
+        }
+      } catch (e) {}
+      try {
+        if (state.gball && typeof state.gball.resize === 'function') state.gball.resize();
+      } catch (e) {}
+    }
+
+    // ── 横画面オーバーレイ ON ─────────────────────────────
+    function enter() {
+      if (active) return;
+      active = true;
+      document.body.classList.add('pta-ls-on');
+      buildOverlay();
+      moveViz(true);
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(sync);
+    }
+
+    // ── 横画面オーバーレイ OFF ────────────────────────────
+    function exit() {
+      if (!active) return;
+      active = false;
+      document.body.classList.remove('pta-ls-on');
+      moveViz(false);
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    // ── 縦画面DOMの値を横画面DOMに同期(横画面アクティブ時のみ) ──
+    function sync() {
+      if (!active) return;
+      const g = (id) => { const e = document.getElementById(id); return e ? e.textContent : ''; };
+      const s = (id, v) => { const e = document.getElementById(id); if (e && e.textContent !== v) e.textContent = v; };
+      const fmt2 = (v) => v ? v.replace(/(\.(\d{2}))\d/, '$1').replace(/(\.--)-$/, '$1') : v;
+      s('pta-ls-cn',     g('drive-course-name'));
+      s('pta-ls-cs',     g('drive-state'));
+      s('pta-ls-sec',    g('now-sector-num'));
+      s('pta-ls-lap',    g('lap-count'));
+      s('pta-ls-seclbl', 'SECTOR ' + g('now-sector-num'));
+      s('pta-ls-timer',  g('current-lap-time'));
+      s('pta-ls-nsval',  g('next-sector-value'));
+      s('pta-ls-fin',    g('finish-countdown'));
+      s('pta-ls-rec',    fmt2(g('best-lap-time')));
+      s('pta-ls-lst',    fmt2(g('last-lap-time')));
+      // START/STOP ボタン同期
+      const ss = document.getElementById('pta-ls-ss');
+      const so = document.getElementById('btn-start-stop');
+      if (ss && so) {
+        const txt = so.textContent.trim();
+        if (ss.textContent !== txt) ss.textContent = txt;
+        const isStop = so.classList.contains('stop');
+        ss.classList.toggle('stop', isStop);
+        ss.style.background = isStop ? '#cc3333' : '#22aa44';
+      }
+      rafId = requestAnimationFrame(sync);
+    }
+
+    // ── 向き判定と切替 ─────────────────────────────────────
+    function check() {
+      // 走行中(driveActive)は向き変更を無視 — 開始時の向きで固定
+      if (state.driveActive && lockedOrientation !== null) {
+        return;
+      }
+      const isLandscape = window.innerWidth > window.innerHeight * 1.05;
+      const drive = document.getElementById('screen-drive');
+      const onDrive = drive && drive.classList.contains('active');
+      if (isLandscape && onDrive) enter();
+      else exit();
+    }
+
+    // ── 走行開始時に現在の向きをロック ────────────────────
+    function lockOrientation() {
+      lockedOrientation = active ? 'landscape' : 'portrait';
+    }
+    function unlockOrientation() {
+      lockedOrientation = null;
+      // 解除後に向きを再チェック(横→縦に切り替わっていれば反映)
+      check();
+    }
+
+    // ── 横画面アクティブか問い合わせ(縦画面DOM更新スキップ判定用) ──
+    function isActive() { return active; }
+
+    // 向き監視
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', () => setTimeout(check, 100));
+    const driveEl = document.getElementById('screen-drive');
+    if (driveEl) {
+      new MutationObserver(check).observe(driveEl, {
+        attributes: true, attributeFilter: ['class']
+      });
+    }
+
+    return { check, lockOrientation, unlockOrientation, isActive };
+  })();
+
+  // ── 走行開始/停止時に向きをロック/解除 ────────────────────
+  // btn-start-stop のクリック直後にロック状態を切り替え
+  const _origStartBtn = document.getElementById('btn-start-stop');
+  if (_origStartBtn) {
+    _origStartBtn.addEventListener('click', () => {
+      // クリック処理が走った後の state.driveActive を確認
+      setTimeout(() => {
+        if (state.driveActive) {
+          Landscape.lockOrientation();
+        } else {
+          Landscape.unlockOrientation();
+        }
+      }, 50);
+    }, true);
+  }
+
+  // 起動時に向きを判定
+  setTimeout(() => Landscape.check(), 300);
+
+
   // 動作確認できたら下記のコメントを外す
   // if ('serviceWorker' in navigator) {
   //   window.addEventListener('load', () => {
