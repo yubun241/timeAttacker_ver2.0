@@ -11,7 +11,7 @@ window.addEventListener('error', function(e) {
 });
 
 /* ============================================================
-   TIME ATTACKER  (Ver.1.0 / 藤井工藝)
+   TIME ATTACKER  (Ver.2.0 / 藤井工藝)
    GPS time-attack PWA with map-based line drawing
    ============================================================ */
 
@@ -3191,7 +3191,18 @@ window.addEventListener('error', function(e) {
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      // ── 一時リカバリ: 旧 SW を全解除 + 全キャッシュをクリア ──
+      // 古い app.js がキャッシュから返される問題を強制解消
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      }).then(() => {
+        if (window.caches && caches.keys) {
+          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+        }
+      }).then(() => {
+        // 再登録は次回起動時に行う（今回はリカバリのみ）
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
     });
   }
 

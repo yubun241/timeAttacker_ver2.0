@@ -9,7 +9,7 @@
 // GitHub Pages にファイルをアップロードすると、ブラウザ再読み込みだけで
 // 即座に最新版が反映されるので、キャッシュ番号の手動更新は不要。
 
-const CACHE = `timeattacker-v${Date.now()}`;
+const CACHE = `timeattacker-v2.0.1-${Date.now()}`;
 
 const APP_SHELL = [
   './',
