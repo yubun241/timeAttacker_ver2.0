@@ -516,7 +516,6 @@ window.addEventListener('error', function(e) {
     showScreen('settings');
     renderSettings();
   }
-  }
 
   // 設定値を画面に反映
   function renderSettings() {
