@@ -2871,6 +2871,7 @@ window.addEventListener('error', function(e) {
     setCourse(c) {
       this.waypoints = [];
       this.ghostTimes = [];
+      this.routePts = null;     // OSRM 道なり経路 ([{lat, lon}, ...])
       if (!c) { this.bbox = null; return; }
 
       const wp = [];
@@ -2902,6 +2903,35 @@ window.addEventListener('error', function(e) {
         this.bbox = { minLat, maxLat, minLon, maxLon, meanLat: (minLat + maxLat) / 2 };
       } else {
         this.bbox = null;
+      }
+
+      // ─── OSRM 道なり経路を取得 (バックグラウンド) ───
+      if (wp.length >= 2) {
+        const key = wp.map(p => p.lat.toFixed(5) + ',' + p.lon.toFixed(5)).join(';');
+        if (this._lastRouteKey !== key) {
+          this._lastRouteKey = key;
+          const coordStr = wp.map(p => p.lon + ',' + p.lat).join(';');
+          const url = 'https://router.project-osrm.org/route/v1/driving/' +
+                      coordStr + '?overview=full&geometries=geojson';
+          fetch(url)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (!data || !data.routes || data.routes.length === 0) return;
+              const geom = data.routes[0].geometry || {};
+              const coords = geom.coordinates || [];
+              if (coords.length < 2) return;
+              const pts = coords.map(c => ({ lat: c[1], lon: c[0] }));
+              this.routePts = pts;
+              // bbox を経路全体に拡張 (waypoint と道なり経路 両方を含む)
+              let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+              pts.concat(this.waypoints || []).forEach(p => {
+                minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+                minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+              });
+              this.bbox = { minLat, maxLat, minLon, maxLon, meanLat: (minLat + maxLat) / 2 };
+            })
+            .catch(() => { /* ネットワーク失敗時は直線フォールバック */ });
+        }
       }
     }
     // lat/lon → canvas x/y (アスペクト比保持, メートル換算)
@@ -2978,7 +3008,18 @@ window.addEventListener('error', function(e) {
         ctx.translate(-_cx, -_cy);
       }
 
-      if (pts.length >= 2) {
+      // ─── 骨格描画: OSRM 道なり経路があれば優先、無ければ直線フォールバック ───
+      if (this.routePts && this.routePts.length >= 2) {
+        const rp = this.routePts.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
+        if (rp.length >= 2) {
+          ctx.strokeStyle = '#5b6878';
+          ctx.lineWidth = 4;
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.beginPath();
+          rp.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+          ctx.stroke();
+        }
+      } else if (pts.length >= 2) {
         ctx.strokeStyle = '#3a4452';
         ctx.lineWidth = 3;
         ctx.lineJoin = 'round';
@@ -3385,8 +3426,10 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   position:absolute !important;inset:0 !important;
   width:100% !important;height:100% !important;
   max-width:none !important;min-width:0 !important;margin:0 !important;
-  aspect-ratio:auto !important;border-radius:10px;}
-#pta-ls-mapbox canvas{width:100% !important;height:100% !important;display:block;}
+  aspect-ratio:auto !important;border:none !important;border-radius:10px;}
+#pta-ls-mapbox canvas{
+  width:100% !important;height:100% !important;display:block;
+  position:absolute !important;inset:0 !important;}
 #pta-ls-mapbox .g-cal-btn,#pta-ls-mapbox #btn-g-cal{display:none !important;}
 #pta-ls-mapbox .course-map-legend{bottom:6px;right:6px;top:auto !important;
   font-size:10px;gap:8px;opacity:.85;}
@@ -3514,7 +3557,11 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
         if (mcell) { mcell._op = mcell.parentNode; mcell._on = mcell.nextSibling; box.appendChild(mcell); }
         vizMoved = true;
         setMGView(mgView);
+        // レイアウト確定の各タイミングで resize 再試行 (CSS aspect-ratio 干渉対策)
+        setTimeout(resizeViz, 50);
         setTimeout(resizeViz, 200);
+        setTimeout(resizeViz, 500);
+        setTimeout(resizeViz, 1000);
       } else if (!to && vizMoved) {
         const rst = (el) => { if (!el) return;
           el.style.display = el.style.opacity = el.style.zIndex = el.style.pointerEvents = ''; };
@@ -3555,9 +3602,23 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       if (!box) return;
       const r = box.getBoundingClientRect();
       if (r.width < 2 || r.height < 2) return;
-      const sz = Math.round(Math.max(r.width, r.height, 80));
-      const cv = document.getElementById('gball-canvas');
-      if (cv) { cv.width = cv.height = sz; }
+
+      // G-ball canvas は正方形になるようサイズ強制
+      const gcv = document.getElementById('gball-canvas');
+      if (gcv) {
+        const sz = Math.round(Math.min(r.width, r.height));
+        gcv.width = gcv.height = sz;
+      }
+
+      // course-canvas は box の実サイズに合わせて手動でサイズ設定
+      // (aspect-ratio CSS の干渉でレイアウト確定が遅れるため強制)
+      const mcv = document.getElementById('course-canvas');
+      if (mcv) {
+        const dpr = window.devicePixelRatio || 1;
+        mcv.width  = Math.round(r.width * dpr);
+        mcv.height = Math.round(r.height * dpr);
+      }
+
       try { window.dispatchEvent(new Event('resize')); } catch (e) {}
       try {
         if (state.courseMap && typeof state.courseMap.resize === 'function') {
