@@ -3345,7 +3345,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   <div id="pta-ls-center">
     <div id="pta-ls-brand">藤井工藝</div>
     <div id="pta-ls-seclbl">SECTOR 1</div>
-    <div id="pta-ls-timer">00:00.000</div>
+    <div id="pta-ls-timer">00:00.00</div>
     <div id="pta-ls-nextsec">
       <span id="pta-ls-nextsec-lbl">TO NEXT SECTOR</span>
       <span id="pta-ls-nsval">--:--.--</span>
@@ -3518,9 +3518,9 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       s('pta-ls-sec',    g('now-sector-num'));
       s('pta-ls-lap',    g('lap-count'));
       s('pta-ls-seclbl', 'SECTOR ' + g('now-sector-num'));
-      s('pta-ls-timer',  g('current-lap-time'));
-      s('pta-ls-nsval',  g('next-sector-value'));
-      s('pta-ls-fin',    g('finish-countdown'));
+      s('pta-ls-timer',  fmt2(g('current-lap-time')));
+      s('pta-ls-nsval',  fmt2(g('next-sector-value')));
+      s('pta-ls-fin',    fmt2(g('finish-countdown')));
       s('pta-ls-rec',    fmt2(g('best-lap-time')));
       s('pta-ls-lst',    fmt2(g('last-lap-time')));
       // START/STOP ボタン同期
