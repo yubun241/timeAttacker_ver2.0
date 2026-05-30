@@ -3251,7 +3251,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
 #pta-ls-main{flex:1;display:flex;min-height:0;overflow:hidden;width:100%;}
 
 /* 左カラム: 操作系 */
-#pta-ls-left{width:150px;flex-shrink:0;display:flex;flex-direction:column;
+#pta-ls-left{width:130px;flex-shrink:0;display:flex;flex-direction:column;
   padding:10px 12px;gap:10px;border-right:1px solid #1c2230;}
 #pta-ls-hdr{display:flex;align-items:flex-start;gap:8px;}
 .pta-ls-bk{background:none;border:1px solid #2a3040;border-radius:8px;
@@ -3294,7 +3294,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
 .pta-ls-sv.acc{color:#ffb000;}
 
 /* 右カラム */
-#pta-ls-right{width:260px;flex-shrink:0;display:flex;flex-direction:column;
+#pta-ls-right{width:200px;flex-shrink:0;display:flex;flex-direction:column;
   padding:10px 12px;gap:8px;border-left:1px solid #1c2230;}
 #pta-ls-mapbox{position:relative;width:100%;flex:1 1 0;min-height:0;
   background:#0d1118;border:1px solid #1c2230;border-radius:10px;overflow:hidden;}
@@ -3314,7 +3314,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
 .pta-ls-info{display:flex;align-items:center;justify-content:space-between;
   width:100%;padding:4px 6px;}
 .pta-ls-il{font:11px sans-serif;letter-spacing:.16em;color:#7a8499;}
-.pta-ls-iv{font:bold 38px "IBM Plex Mono",monospace;color:#e0e6f0;line-height:1;}
+.pta-ls-iv{font:bold 32px "IBM Plex Mono",monospace;color:#e0e6f0;line-height:1;}
 `;
       document.head.appendChild(s);
     }

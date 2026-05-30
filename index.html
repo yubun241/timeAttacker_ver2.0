@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.0.4" />
+  <link rel="stylesheet" href="styles.css?v=2.0.5" />
 </head>
 <body>
 
@@ -77,34 +77,6 @@ so inaccuracies may occur depending on the environment.</div>
     </div>
   </section>
 
-  <!-- ====== 起動デバッグオーバーレイ (左上に常時表示) ====== -->
-  <div id="boot-dbg" style="position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;padding:6px 10px;z-index:99999;pointer-events:none;word-break:break-all;max-height:30vh;overflow:hidden;">
-    BOOT: html-loaded
-  </div>
-  <script>
-    (function(){
-      var dbg = document.getElementById('boot-dbg');
-      function log(msg){ if(dbg) dbg.innerHTML += '<br>' + msg; }
-      window.addEventListener('error', function(e){
-        log('<span style="color:#f55">ERR: ' + e.message + ' @' + (e.filename||'').split('/').pop() + ':' + e.lineno + '</span>');
-      });
-      window.addEventListener('unhandledrejection', function(e){
-        log('<span style="color:#f55">REJ: ' + (e.reason && e.reason.message || e.reason) + '</span>');
-      });
-      // SP→警告画面に強制遷移するインラインタイマー（app.jsが死んでも動く）
-      setTimeout(function(){
-        var s = document.getElementById('screen-splash');
-        var w = document.getElementById('screen-warning');
-        if (s && w && s.classList.contains('active')) {
-          s.classList.remove('active');
-          w.classList.add('active');
-          log('FORCED: splash → warning');
-        }
-      }, 2500);
-      window.addEventListener('load', function(){ log('LOAD event fired'); });
-      document.addEventListener('DOMContentLoaded', function(){ log('DOM ready'); });
-    })();
-  </script>
 
   <!-- ====== HOME SCREEN ====== -->
   <section id="screen-home" class="screen">
@@ -556,6 +528,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.0.4"></script>
+  <script src="app.js?v=2.0.5"></script>
 </body>
 </html>
