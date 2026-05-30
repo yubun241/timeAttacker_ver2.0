@@ -511,17 +511,6 @@
     document.getElementById('cb-pid-intake').checked   = !!s.pids.intake;
     document.getElementById('cb-pid-throttle').checked = !!s.pids.throttle;
 
-    // 車両設定
-    const v = s.vehicle || {};
-    document.getElementById('cfg-final-drive').value = v.finalDrive || 3.502;
-    document.getElementById('cfg-tire-diam').value   = v.tireDiamMm || 616;
-    const gr = v.gearRatios || [];
-    for (let i = 1; i <= 6; i++) {
-      const el = document.getElementById('cfg-gear-' + i);
-      if (el) el.value = gr[i - 1] != null ? gr[i - 1] : '';
-    }
-    document.getElementById('cfg-gear-tol').value = v.tolerancePct || 10;
-
     // BLE 状態を画面に反映
     if (typeof updateBleUI === 'function') updateBleUI();
   }
@@ -543,24 +532,6 @@
       intake:   document.getElementById('cb-pid-intake').checked,
       throttle: document.getElementById('cb-pid-throttle').checked,
     };
-
-    // 車両設定
-    const gearRatios = [];
-    for (let i = 1; i <= 6; i++) {
-      const el = document.getElementById('cfg-gear-' + i);
-      if (el && el.value !== '') {
-        const v = parseFloat(el.value);
-        if (isFinite(v)) gearRatios.push(v);
-      }
-    }
-    s.vehicle = {
-      ...(s.vehicle || {}),
-      finalDrive:   parseFloat(document.getElementById('cfg-final-drive').value) || 3.502,
-      tireDiamMm:   parseFloat(document.getElementById('cfg-tire-diam').value) || 616,
-      gearRatios:   gearRatios.length > 0 ? gearRatios : [4.459, 2.508, 1.556, 1.142, 0.851, 0.672],
-      tolerancePct: parseFloat(document.getElementById('cfg-gear-tol').value) || 10,
-    };
-
 
     return s;
   }
@@ -594,23 +565,6 @@
     toast('設定を保存しました');
     showScreen('home');
   });
-
-  // 車両設定を Mini F56 JCW Automatic デフォルトに戻す (保存はせず UI のみリセット)
-  // BMW Group 公式スペック (2014/12 プレスリリース) 6-speed Aisin Steptronic Sports
-  const _btnResetVehicle = document.getElementById('btn-reset-vehicle');
-  if (_btnResetVehicle) {
-    _btnResetVehicle.addEventListener('click', () => {
-      document.getElementById('cfg-final-drive').value = 3.502;
-      document.getElementById('cfg-tire-diam').value   = 616;
-      const JCW_AT_RATIOS = [4.459, 2.508, 1.555, 1.142, 0.851, 0.672];
-      for (let i = 1; i <= 6; i++) {
-        const el = document.getElementById('cfg-gear-' + i);
-        if (el) el.value = JCW_AT_RATIOS[i - 1];
-      }
-      document.getElementById('cfg-gear-tol').value = 10;
-      toast('Mini F56 JCW AT デフォルトに戻しました（保存ボタンで確定）');
-    });
-  }
 
   // ============================================================
   // BLE / OBD2 接続 (Phase 1: 接続のみ。PID 取得は Phase 2)
