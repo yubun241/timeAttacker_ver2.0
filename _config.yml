@@ -1,0 +1,8 @@
+# GitHub Pages — Jekyll フィルタ無効化
+# sw.js / manifest.json / assetlinks.json などを Jekyll 処理から除外する
+include:
+  - sw.js
+  - manifest.json
+
+# 不要な Jekyll 処理を無効化
+plugins: []

@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0a0c10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>TIME ATTACKER</title>
+
+  <link rel="manifest" href="manifest.json" />
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ====== SPLASH SCREEN (2秒表示後に注意事項へ自動遷移) ====== -->
+  <section id="screen-splash" class="screen active">
+    <div class="splash-container">
+      <div class="splash-mark">◢</div>
+      <div class="splash-name">TIME ATTACKER</div>
+      <div class="splash-maker">藤井工藝</div>
+      <div class="splash-ver">Ver.1.0</div>
+    </div>
+  </section>
+
+  <!-- ====== WARNING SCREEN (first screen on every startup) ====== -->
+  <section id="screen-warning" class="screen">
+    <div class="warning-container">
+      <div class="warning-brand">
+        <div class="wb-name">TIME ATTACKER</div>
+        <div class="wb-maker">藤井工藝</div>
+        <div class="wb-ver">Ver.1.0</div>
+      </div>
+
+      <div class="warning-card">
+        <div class="warning-title">【注意事項】</div>
+        <div class="warning-body">
+運転中に操作しないでください。
+STARTボタンを押せば、設定地点を通過すると自動で計測が開始されます。
+あらかじめ設定してから運転してください。
+画面を覗き込んで運転するのはやめてください。
+よそ見運転は大変危険です。
+GPSによる測定を行っているため、
+環境によって誤差が発生する場合があります。</div>
+      </div>
+
+      <div class="warning-card">
+        <div class="warning-title">【WARNING】</div>
+        <div class="warning-body">
+Do not operate this application while driving.
+After pressing the START button,
+measurement will automatically begin when passing the configured point.
+Please complete all settings before driving.
+Do not stare at the screen while driving.
+Distracted driving is extremely dangerous.
+This application uses GPS measurement,
+so inaccuracies may occur depending on the environment.</div>
+      </div>
+
+      <button id="btn-warning-ok" class="btn-primary big">OK</button>
+    </div>
+  </section>
+
+  <!-- ====== HOME SCREEN ====== -->
+  <section id="screen-home" class="screen">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">◢</span>
+        <span class="brand-name">TIME ATTACKER</span>
+      </div>
+      <div class="brand-meta">
+        <span class="bm-maker">藤井工藝</span>
+        <span class="bm-ver">Ver.1.0</span>
+      </div>
+      <button id="btn-open-history" class="text-btn history-btn" title="走行履歴">走行履歴</button>
+      <button id="btn-open-settings" class="icon-btn settings-btn" title="設定">⚙</button>
+    </header>
+
+    <main class="home-main">
+      <div class="section-title">
+        <span class="dot"></span>
+        <span>COURSES</span>
+      </div>
+
+      <div id="course-list" class="course-list"></div>
+
+      <button id="btn-new-course" class="btn-primary big">
+        <span class="plus">+</span>
+        <span>新規コースを作成</span>
+      </button>
+
+      <div class="hint">
+        マップ上で線を引き、スタート / ゴール / セクター線を定義します。
+      </div>
+    </main>
+  </section>
+
+  <!-- ====== SETTINGS SCREEN ====== -->
+  <section id="screen-settings" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-action="back-home" id="btn-settings-back">‹</button>
+      <div class="brand">
+        <span class="brand-name">SETTINGS</span>
+      </div>
+      <div class="brand-meta"><span class="bm-ver">設定</span></div>
+    </header>
+
+    <main class="settings-main">
+
+      <!-- ── OBD2 接続 ─────────────────────────── -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span class="dot"></span>
+          <span>OBD2 接続</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <div class="setting-name">接続モード</div>
+          </div>
+          <div class="seg-toggle" data-key="obdMode">
+            <button class="seg-btn"        data-value="single">Single</button>
+            <button class="seg-btn active"  data-value="double">Double</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <div class="setting-name">自動再接続</div>
+            <div class="setting-desc">通信断時に自動で復旧を試みる</div>
+          </div>
+          <div class="seg-toggle" data-key="obdAutoReconnect">
+            <button class="seg-btn active" data-value="on">ON</button>
+            <button class="seg-btn"       data-value="off">OFF</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 取得項目 ─────────────────────────── -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span class="dot"></span>
+          <span>取得項目</span>
+        </div>
+
+        <label class="check-row">
+          <input type="checkbox" id="cb-pid-rpm" checked>
+          <span class="check-text">
+            <span class="check-name">回転数</span>
+            <span class="check-desc">rpm</span>
+          </span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" id="cb-pid-coolant" checked>
+          <span class="check-text">
+            <span class="check-name">水温</span>
+            <span class="check-desc">°C</span>
+          </span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" id="cb-pid-oiltemp" checked>
+          <span class="check-text">
+            <span class="check-name">油温</span>
+            <span class="check-desc">°C</span>
+          </span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" id="cb-pid-intake" checked>
+          <span class="check-text">
+            <span class="check-name">吸気温度</span>
+            <span class="check-desc">°C</span>
+          </span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" id="cb-pid-throttle" checked>
+          <span class="check-text">
+            <span class="check-name">スロットル開度</span>
+            <span class="check-desc">%</span>
+          </span>
+        </label>
+
+      </div>
+
+      <!-- ── 接続デバイス ───────────────────────── -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span class="dot"></span>
+          <span>接続デバイス</span>
+        </div>
+
+        <div class="ble-status-row">
+          <div class="ble-status-indicator" id="ble-status-indicator">
+            <span class="ble-dot"></span>
+            <span class="ble-status-text" id="ble-status-text">未接続</span>
+          </div>
+          <div class="ble-device-name" id="ble-device-name"></div>
+        </div>
+
+        <div class="ble-actions">
+          <button id="btn-ble-scan" class="btn-primary">BLE スキャン &amp; 接続</button>
+          <button id="btn-ble-reconnect" class="btn-ghost" style="display:none">前回のデバイスへ再接続</button>
+          <button id="btn-ble-disconnect" class="btn-ghost" style="display:none">切断</button>
+        </div>
+
+        <div class="ble-hint" id="ble-hint">
+          UniCarScan 2000 など ELM327 互換アダプタに対応。Android Chrome 推奨。
+        </div>
+
+        <!-- OBD デバッグパネル（接続後に表示） -->
+        <div class="obd-debug-panel" id="obd-debug-panel" style="display:none">
+          <div class="obd-debug-title">▸ OBD DEBUG</div>
+          <div class="obd-debug-row"><span>接続状態</span><span id="dbg-status" class="dbg-val">--</span></div>
+          <div class="obd-debug-row"><span>最終受信 raw</span><span id="dbg-raw" class="dbg-val">--</span></div>
+          <div class="obd-debug-row"><span>受信カウント</span><span id="dbg-count" class="dbg-val">0</span></div>
+          <div class="obd-debug-row"><span>パース成功</span><span id="dbg-ok" class="dbg-val">0</span></div>
+          <div class="obd-debug-row"><span>タイムアウト</span><span id="dbg-timeout" class="dbg-val">0</span></div>
+          <div class="obd-debug-row"><span>STOPPED 連続</span><span id="dbg-stopped" class="dbg-val">0</span></div>
+          <div class="obd-debug-row"><span>RPM</span><span id="dbg-rpm" class="dbg-val">--</span></div>
+          <div class="obd-debug-row"><span>Coolant</span><span id="dbg-coolant" class="dbg-val">--</span></div>
+          <div class="obd-debug-row"><span>Oil</span><span id="dbg-oil" class="dbg-val">--</span></div>
+          <button id="btn-toggle-dbg-overlay" class="btn-secondary"
+                  style="margin-top:10px;width:100%;padding:8px;font-size:13px;">
+            生ログオーバーレイ表示 ON/OFF
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-foot">
+        <button id="btn-settings-save" class="btn-primary big">保存</button>
+      </div>
+
+    </main>
+  </section>
+
+  <!-- ====== HISTORY SCREEN (走行履歴一覧) ====== -->
+  <section id="screen-history" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-action="back-home" id="btn-history-back">‹</button>
+      <div class="brand">
+        <span class="brand-name">HISTORY</span>
+      </div>
+      <div class="brand-meta"><span class="bm-ver">走行履歴</span></div>
+    </header>
+
+    <main class="history-main">
+      <div id="history-list" class="history-list"></div>
+      <div id="history-empty" class="history-empty hidden">
+        まだ走行履歴がありません。<br>計測を行うと自動でここに保存されます。
+      </div>
+    </main>
+  </section>
+
+  <!-- ====== SESSION DETAIL SCREEN (個別セッション) ====== -->
+  <section id="screen-session" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" id="btn-session-back">‹</button>
+      <div class="brand">
+        <span class="brand-name" id="session-course-name">--</span>
+      </div>
+      <div class="brand-meta"><span class="bm-ver" id="session-date">--</span></div>
+    </header>
+
+    <main class="session-main">
+      <!-- サマリ -->
+      <div class="session-summary">
+        <div class="summary-item">
+          <div class="summary-label">LAPS</div>
+          <div class="summary-value" id="session-lap-count">0</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">BEST</div>
+          <div class="summary-value accent" id="session-best">--:--.---</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">DURATION</div>
+          <div class="summary-value" id="session-duration">--</div>
+        </div>
+        <div class="summary-item" id="session-obd-flag">
+          <div class="summary-label">OBD</div>
+          <div class="summary-value">--</div>
+        </div>
+      </div>
+
+      <!-- 分析マップ -->
+      <div class="analysis-map-wrap">
+        <div id="session-map" class="analysis-map"></div>
+        <div id="session-map-empty" class="analysis-map-empty hidden">GPS データなし</div>
+      </div>
+
+      <!-- メトリック選択 -->
+      <div class="analysis-controls">
+        <div class="control-row">
+          <div class="control-label">指標</div>
+          <div id="metric-chips" class="chip-row"></div>
+        </div>
+
+        <!-- ラップ選択（複数選択可） -->
+        <div class="control-row">
+          <div class="control-label">ラップ</div>
+          <div id="lap-chips" class="chip-row"></div>
+        </div>
+
+        <!-- カラースケール凡例 -->
+        <div class="legend-row" id="legend-row">
+          <span class="legend-label">凡例</span>
+          <div class="legend-gradient" id="legend-gradient"></div>
+          <span id="legend-min" class="legend-tick">--</span>
+          <span id="legend-max" class="legend-tick">--</span>
+        </div>
+      </div>
+
+      <!-- ラップ一覧 -->
+      <div class="section-title"><span class="dot"></span><span>ラップタイム</span></div>
+      <div id="session-lap-list" class="session-lap-list"></div>
+
+      <!-- 操作ボタン -->
+      <div class="session-actions">
+        <button id="btn-session-export" class="btn-ghost">CSV エクスポート</button>
+        <button id="btn-session-delete" class="btn-ghost danger">この履歴を削除</button>
+      </div>
+    </main>
+  </section>
+
+  <!-- ====== EDIT SCREEN ====== -->
+  <section id="screen-edit" class="screen">
+    <header class="topbar">
+      <button class="icon-btn" data-action="back-home">‹</button>
+      <input id="course-name" class="course-name-input" type="text" placeholder="コース名" />
+      <button class="icon-btn" data-action="edit-settings" title="詳細">⚙</button>
+      <button class="icon-btn" data-action="delete-course" title="削除">✕</button>
+    </header>
+
+    <div class="edit-mode-bar">
+      <button class="mode-btn" data-mode="start">スタート線</button>
+      <button class="mode-btn" data-mode="finish">フィニッシュ線</button>
+      <button class="mode-btn" data-mode="section">セクター線</button>
+      <button class="icon-btn locate-btn" data-action="locate-me" title="現在地へ">⌖</button>
+      <div class="course-type">
+        <label>
+          <input type="checkbox" id="circuit-toggle" />
+          <span>周回</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="edit-status" class="status-strip">マップ上で線を引いてください</div>
+
+    <div id="map-edit" class="map"></div>
+
+    <div class="bottom-bar">
+      <button id="btn-clear-section" class="btn-ghost">セクター線全消去</button>
+      <button id="btn-start-drive" class="btn-primary">計測 ▶</button>
+    </div>
+  </section>
+
+  <!-- ====== DETAIL MODAL ====== -->
+  <div id="modal-detail" class="modal">
+    <div class="modal-sheet">
+      <header class="modal-header">
+        <h3>コース詳細</h3>
+      </header>
+      <div class="modal-body">
+
+        <div class="form-row">
+          <label>走行時間（分）</label>
+          <input id="cfg-duration" type="number" inputmode="numeric" min="0" step="1" placeholder="0 = 無制限" />
+        </div>
+
+        <div class="form-row">
+          <label>クールダウン（秒）</label>
+          <input id="cfg-cooldown" type="number" inputmode="decimal" min="0" step="0.1" />
+        </div>
+
+        <div class="form-row">
+          <label>GPS精度フィルタ（m）</label>
+          <input id="cfg-acc" type="number" inputmode="numeric" min="0" step="1" />
+        </div>
+
+        <div class="form-row">
+          <label>進行方向フィルタ</label>
+          <label class="switch">
+            <input id="cfg-dirfilter" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="hint-block">
+          ・精度フィルタ 0 = フィルタ無効<br>
+          ・進行方向フィルタ ON: 初回通過方向と逆向きの通過は無視
+        </div>
+
+        <div class="form-divider"></div>
+
+        <div class="section-title small"><span class="dot"></span><span>セクター目標タイム</span></div>
+        <div class="target-hint">例: <code>0520.10</code> → <strong>05:20.10</strong>（MMSS.CC）</div>
+        <div id="sections-edit-list" class="sections-edit-list">
+          <div class="splits-empty">セクター線を描くと表示されます</div>
+        </div>
+
+      </div>
+      <footer class="modal-footer">
+        <button class="btn-cancel" data-action="close-detail">キャンセル</button>
+        <button id="btn-save-detail" class="btn-primary">保存</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ====== DRIVE SCREEN ====== -->
+  <section id="screen-drive" class="screen">
+    <header class="topbar drive-topbar">
+      <button class="icon-btn" data-action="exit-drive">‹</button>
+      <div class="drive-title">
+        <span id="drive-course-name">--</span>
+        <span class="drive-state" id="drive-state">準備中</span>
+      </div>
+      <div class="gps-indicator" id="gps-indicator">
+        <span class="gps-dot"></span>
+        <span id="gps-acc">--</span>
+      </div>
+      <div class="obd-indicator" id="obd-indicator" title="OBD2 接続状態">
+        <span class="obd-dot"></span>
+        <span class="obd-label">OBD</span>
+      </div>
+    </header>
+
+    <main class="drive-main">
+
+      <!-- ─── 縦画面 (現状のレイアウト) ─── -->
+      <div class="drive-portrait-only">
+
+      <button id="btn-start-stop" class="big-action start">START</button>
+
+      <div class="status-grid">
+        <div class="status-cell">
+          <div class="status-label">LAP</div>
+          <div id="lap-count" class="status-value">0</div>
+        </div>
+        <div class="status-cell">
+          <div class="status-label">FINISH</div>
+          <div id="finish-countdown" class="status-value mono">--:--.--</div>
+        </div>
+        <div class="status-cell">
+          <div class="status-label">RECORD</div>
+          <div id="best-lap-time" class="status-value mono accent">--:--.---</div>
+        </div>
+        <div class="status-cell">
+          <div class="status-label">LAST</div>
+          <div id="last-lap-time" class="status-value mono">--:--.---</div>
+        </div>
+      </div>
+
+      <div id="next-sector-display" class="next-sector">
+        <div class="ns-label">to NEXT SECTOR</div>
+        <div id="next-sector-value" class="ns-value">--:--.--</div>
+      </div>
+
+      <div id="best-delta-display" class="best-delta hidden">
+        <span class="bd-label">BEST Δ</span>
+        <span id="best-delta-value" class="bd-value">--</span>
+      </div>
+
+      <div class="now-sector-row">
+        <span class="ns-bar-label">SECTOR</span>
+        <span id="now-sector-num" class="ns-bar-num">1</span>
+      </div>
+      <div class="big-timer">
+        <div id="current-lap-time" class="time-display">00:00.000</div>
+      </div>
+
+      <!-- ─── コースマップ (ゲートから自動描画) ─── -->
+      <div class="course-map-cell">
+        <canvas id="course-canvas" width="640" height="420"></canvas>
+        <div class="course-map-legend">
+          <span class="cm-legend-item"><span class="cm-dot cm-dot-now"></span>現在</span>
+          <span class="cm-legend-item"><span class="cm-dot cm-dot-best"></span>ベスト</span>
+        </div>
+      </div>
+
+      <div class="sensors-row">
+        <div class="sensor-cell gball-cell">
+          <canvas id="gball-canvas" width="320" height="320"></canvas>
+          <button id="btn-g-cal" class="g-cal-btn" title="G ゼロ点補正">ZERO</button>
+          <div class="g-text" id="g-text">0.00 G</div>
+        </div>
+      </div>
+
+      <div id="splits-grid" class="splits-grid"></div>
+
+      <div class="drive-footer">
+        <button id="btn-export-csv" class="btn-ghost">CSV 出力</button>
+        <button id="btn-dbg-portrait" class="btn-ghost">DBG</button>
+        <button id="btn-motion-perm" class="btn-ghost" style="display:none">センサー許可</button>
+      </div>
+
+      </div><!-- /.drive-portrait-only -->
+
+    </main>
+  </section>
+  <!-- ─── デバッグオーバーレイ (GT_DASH 互換) ─── -->
+  <div id="dbg-overlay"></div>
+
+  <div id="toast" class="toast"></div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script src="app.js"></script>
+</body>
+</html>
