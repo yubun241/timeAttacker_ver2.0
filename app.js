@@ -43,7 +43,16 @@ window.addEventListener('error', function(e) {
   const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
   const DEFAULT_CENTER = [35.6812, 139.7671];
   const R_EARTH = 6378137;
-  const G_RANGE = 2.0;             // G-ball max scale
+  let G_RANGE = 2.0;             // G-ball max scale (設定から変更可)
+  let _gMode  = 'vector';        // 'vector' | 'inertia'
+  // 慣性式の物理状態
+  let _gInBall = { x: 0, y: 0, vx: 0, vy: 0, t: 0 };
+  // localStorage から復元
+  try {
+    const _gc = JSON.parse(localStorage.getItem('pta_gcfg') || '{}');
+    if (_gc && isFinite(+_gc.range) && +_gc.range > 0) G_RANGE = +_gc.range;
+    if (_gc && _gc.mode) _gMode = _gc.mode;
+  } catch (e) {}
   const SPEED_WINDOW_S = 30.0;     // speed graph window
   const RECORD_LIMIT = 50000;      // CSV row cap (~14h @ 1Hz)
 
@@ -515,6 +524,19 @@ window.addEventListener('error', function(e) {
   function openSettings() {
     showScreen('settings');
     renderSettings();
+    // G-ball モードボタン: 設定画面を開くたびにバインド
+    const setGMode = (mode) => {
+      _gMode = mode;
+      // 慣性状態リセット(モード切替時に残留速度を消去)
+      _gInBall.x = _gInBall.y = _gInBall.vx = _gInBall.vy = _gInBall.t = 0;
+      document.getElementById('cfg-gball-vec')?.classList.toggle('active', mode === 'vector');
+      document.getElementById('cfg-gball-ine')?.classList.toggle('active', mode === 'inertia');
+      try { localStorage.setItem('pta_gcfg', JSON.stringify({ range: G_RANGE, mode: _gMode })); } catch (e) {}
+    };
+    const vecBtn = document.getElementById('cfg-gball-vec');
+    const ineBtn = document.getElementById('cfg-gball-ine');
+    if (vecBtn) { vecBtn.onclick = () => setGMode('vector');  }
+    if (ineBtn) { ineBtn.onclick = () => setGMode('inertia'); }
   }
 
   // 設定値を画面に反映
@@ -537,6 +559,14 @@ window.addEventListener('error', function(e) {
     document.getElementById('cb-pid-intake').checked   = !!s.pids.intake;
     document.getElementById('cb-pid-throttle').checked = !!s.pids.throttle;
 
+    // G-ball 設定
+    const gRangeEl = document.getElementById('cfg-gball-range');
+    if (gRangeEl) gRangeEl.value = G_RANGE;
+    const gModeVec = document.getElementById('cfg-gball-vec');
+    const gModeIne = document.getElementById('cfg-gball-ine');
+    if (gModeVec) gModeVec.classList.toggle('active', _gMode === 'vector');
+    if (gModeIne) gModeIne.classList.toggle('active', _gMode === 'inertia');
+
     // BLE 状態を画面に反映
     if (typeof updateBleUI === 'function') updateBleUI();
   }
@@ -558,6 +588,16 @@ window.addEventListener('error', function(e) {
       intake:   document.getElementById('cb-pid-intake').checked,
       throttle: document.getElementById('cb-pid-throttle').checked,
     };
+
+    // G-ball 設定を即時反映 + localStorage 保存
+    const gRangeEl = document.getElementById('cfg-gball-range');
+    if (gRangeEl) {
+      const v = parseFloat(gRangeEl.value);
+      if (isFinite(v) && v > 0) G_RANGE = v;
+    }
+    try {
+      localStorage.setItem('pta_gcfg', JSON.stringify({ range: G_RANGE, mode: _gMode }));
+    } catch (e) {}
 
     return s;
   }
@@ -2747,16 +2787,31 @@ window.addEventListener('error', function(e) {
       ctx.fillText('L', cx - r - 8, cy);
       ctx.fillText('R', cx + r + 8, cy);
 
-      // Dot position — 完全慣性式 (物理ボールがダッシュ上を転がる挙動)
-      // ── 縦軸 ───────────────────────────────────────────
-      //   前進加速 (lon_g > 0) → ボール下方向 (B 側へ転がる)
-      //   ブレーキ   (lon_g < 0) → ボール上方向 (F 側へ転がる)
-      // ── 横軸 ───────────────────────────────────────────
-      //   右コーナリング G (lat_g > 0) → ボール左方向 (L 側へ転がる)
-      //   左コーナリング G (lat_g < 0) → ボール右方向 (R 側へ転がる)
-      //   = 慣性で重心が外側に移動する方向 = 実際のボールの転がり
-      let bx = cx - (lat_g / G_RANGE) * r;   // ← 横軸も符号反転 (慣性式)
-      let by = cy + (lon_g / G_RANGE) * r;   // ← 縦軸 慣性式
+      // Dot position
+      // ベクトル式: G 値を直接座標に変換
+      // 慣性式: 質量+バネ+減衰でボールが転がる物理シミュレーション
+      let lat_disp = lat_g, lon_disp = lon_g;
+      if (_gMode === 'inertia') {
+        const now2 = Date.now();
+        const dt = _gInBall.t ? Math.min((now2 - _gInBall.t) / 1000, 0.1) : 0.06;
+        _gInBall.t = now2;
+        const FORCE = 12, SPRING = 3, FRIC = 7;
+        _gInBall.vx += (lat_g * FORCE - _gInBall.x * SPRING) * dt;
+        _gInBall.vy += (lon_g * FORCE - _gInBall.y * SPRING) * dt;
+        _gInBall.vx *= Math.max(0, 1 - FRIC * dt);
+        _gInBall.vy *= Math.max(0, 1 - FRIC * dt);
+        _gInBall.x  += _gInBall.vx * dt;
+        _gInBall.y  += _gInBall.vy * dt;
+        const id = Math.sqrt(_gInBall.x**2 + _gInBall.y**2);
+        if (id > G_RANGE) {
+          _gInBall.x = (_gInBall.x / id) * G_RANGE;
+          _gInBall.y = (_gInBall.y / id) * G_RANGE;
+          _gInBall.vx *= -0.3; _gInBall.vy *= -0.3;
+        }
+        lat_disp = _gInBall.x; lon_disp = _gInBall.y;
+      }
+      let bx = cx - (lat_disp / G_RANGE) * r;
+      let by = cy + (lon_disp / G_RANGE) * r;
       const dx = bx - cx, dy = by - cy;
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d > r - dot) {

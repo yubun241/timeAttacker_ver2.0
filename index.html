@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.0.6" />
+  <link rel="stylesheet" href="styles.css?v=2.0.7" />
 </head>
 <body>
 
@@ -200,6 +200,40 @@ so inaccuracies may occur depending on the environment.</div>
           </span>
         </label>
 
+      </div>
+
+      <!-- ── G-ball 設定 ───────────────────────── -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span class="dot"></span>
+          <span>G-ball 設定</span>
+        </div>
+
+        <!-- MAX G 入力 -->
+        <div class="num-row">
+          <label class="num-label">最大 G</label>
+          <input type="number" id="cfg-gball-range" step="0.5" min="0.5" max="5"
+                 class="num-input" value="2.0">
+        </div>
+        <div style="font-size:11px;color:#7a8499;margin:-4px 0 8px;line-height:1.5;">
+          G ボールの円の端が何 G に相当するか
+        </div>
+
+        <!-- モード切替 -->
+        <div class="setting-row">
+          <div class="setting-label">
+            <div class="setting-name">表示方式</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button id="cfg-gball-vec" class="seg-btn active"
+                    style="flex:1;padding:8px 0;border-radius:8px;">ベクトル</button>
+            <button id="cfg-gball-ine" class="seg-btn"
+                    style="flex:1;padding:8px 0;border-radius:8px;">慣性</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#7a8499;margin:4px 0 0;line-height:1.5;">
+          ベクトル：G値を直接表示 / 慣性：重力ボールが転がる物理シミュレーション
+        </div>
       </div>
 
       <!-- ── 接続デバイス ───────────────────────── -->
@@ -528,6 +562,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.0.6"></script>
+  <script src="app.js?v=2.0.7"></script>
 </body>
 </html>
