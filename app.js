@@ -1,3 +1,15 @@
+// ── グローバルエラートラップ（デバッグ用：画面にエラーを表示） ──
+window.addEventListener('error', function(e) {
+  var msg = 'JS ERR: ' + e.message + ' [' + (e.filename || '').split('/').pop() + ':' + e.lineno + ']';
+  var el = document.getElementById('toast');
+  if (el) {
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;bottom:20px;left:10px;right:10px;background:#c00;color:#fff;padding:14px;font-size:12px;z-index:9999;border-radius:8px;word-break:break-all;display:block;opacity:1;pointer-events:none;';
+  } else {
+    console.error(msg);
+  }
+});
+
 /* ============================================================
    TIME ATTACKER  (Ver.1.0 / 藤井工藝)
    GPS time-attack PWA with map-based line drawing
