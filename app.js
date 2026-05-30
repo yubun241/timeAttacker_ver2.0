@@ -2624,21 +2624,31 @@ window.addEventListener('error', function(e) {
     function tick() {
       if (state.view !== 'drive') return;
 
-      // ─── 横画面オーバーレイがアクティブな間は、縦画面DOM更新を全スキップ
-      //     (Landscape側で別途rAFループが回って必要な値だけ画面に反映される)
-      //     ただし、データ取得 (state.* への書き込み) は GPS/motion handler 側で
-      //     継続するため、CSV記録やラップ判定は止まらない。
+      // ─── 横画面オーバーレイがアクティブな間は、縦画面のテキストDOM更新だけスキップ
+      //     Canvas (G-ball / コースマップ) は横画面の右上ボックスに移設されているため
+      //     描画ループは継続させる必要がある。
+      //     データ取得 (state.* への書き込み) は GPS/motion handler 側で継続。
       // ─────────────────────────────────────────────────────────────
       if (typeof Landscape !== 'undefined' && Landscape.isActive && Landscape.isActive()) {
-        // 必要最小限の処理だけ実行: セッション時間切れ判定とラップ完了
         const now = Date.now();
         const c = getActiveCourse();
+        // セッション時間切れ判定だけは実行 (ラップ完了は GPS handler 側で動く)
         if (state.driveActive && c?.duration > 0 && state.driveStartT != null) {
           const remaining = c.duration * 1000 - (now - state.driveStartT);
           if (remaining <= 0) {
             finishSession();
             toast('⏱ セッション時間終了');
           }
+        }
+        // Canvas 描画は継続 (横画面右上ボックスへ移設されている)
+        _tickFrame = (_tickFrame + 1) % 3;
+        if (_tickFrame === 0) {
+          try {
+            if (state.gball) {
+              state.gball.draw(state.g_lat, state.g_lon);
+            }
+            if (state.courseMap) state.courseMap.draw();
+          } catch (_) {}
         }
         state.rafId = requestAnimationFrame(tick);
         return;
@@ -2953,6 +2963,21 @@ window.addEventListener('error', function(e) {
 
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
+
+      // ─── START を画面下端に固定: course-up 回転 ───
+      // pts[0] (START) がキャンバス中心から見て真下 (π/2) になるように
+      // ctx を回転させ、走行方向が画面上を向くようにする
+      let _mapRot = 0;
+      if (pts.length >= 1) {
+        const _cx = w / 2, _cy = h / 2;
+        const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
+        _mapRot = Math.PI / 2 - _phi;
+        ctx.save();
+        ctx.translate(_cx, _cy);
+        ctx.rotate(_mapRot);
+        ctx.translate(-_cx, -_cy);
+      }
+
       if (pts.length >= 2) {
         ctx.strokeStyle = '#3a4452';
         ctx.lineWidth = 3;
@@ -2996,6 +3021,9 @@ window.addEventListener('error', function(e) {
           ctx.beginPath(); ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2); ctx.stroke();
         }
       }
+
+      // 回転を解除
+      if (_mapRot) ctx.restore();
     }
   }
 
