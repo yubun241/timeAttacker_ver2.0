@@ -393,6 +393,7 @@ window.addEventListener('error', function(e) {
     lapNumber: 0,
     lastLapMs: null,
     currentLapSplits: [],              // [{ idx, t, splitMs }]
+    mapRotOffset: 0,                   // 地図回転オフセット [ラジアン] スライダーで調整
     completedLaps: [],                 // セッション中に完走した全ラップの配列
     sessionStartTime: null,            // セッション開始 ms
     sessionObdActive: false,           // このセッション中に OBD が接続されていたか
@@ -2159,6 +2160,22 @@ window.addEventListener('error', function(e) {
     state.courseMap = new CourseMap(document.getElementById('course-canvas'));
     if (state.courseMap) state.courseMap.setCourse(c);
 
+    // コースごとの地図回転オフセットを復元
+    try {
+      const saved = localStorage.getItem('pta_maprot_' + c.id);
+      state.mapRotOffset = saved !== null ? parseFloat(saved) : 0;
+    } catch (_) { state.mapRotOffset = 0; }
+    // スライダーUIに反映
+    const _rotSlider = document.getElementById('map-rot-slider');
+    const _rotLabel  = document.getElementById('map-rot-label');
+    const _rotDeg = Math.round(state.mapRotOffset * 180 / Math.PI);
+    if (_rotSlider) _rotSlider.value = _rotDeg;
+    if (_rotLabel)  _rotLabel.textContent = _rotDeg + '°';
+    const _lsSlider = document.getElementById('pta-ls-rot-slider');
+    const _lsLabel  = document.getElementById('pta-ls-rot-label');
+    if (_lsSlider) _lsSlider.value = _rotDeg;
+    if (_lsLabel)  _lsLabel.textContent = _rotDeg + '°';
+
     // CSV buffer
     state.csvRows = [];
 
@@ -2888,6 +2905,7 @@ window.addEventListener('error', function(e) {
         const m = this._mid(c.startLine); if (m) wp.push(m);
       }
       this.waypoints = wp;
+      this.courseType = c.type || 'circuit';  // 'circuit' | 'ptp'
 
       // ゴースト時刻列: [0, split0, split1, ..., totalMs]
       if (c.bestLap) {
@@ -2999,28 +3017,17 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
-      // ─── 回転: START を下に固定しつつ、コース長軸を canvas 長軸に合わせる ───
-      // 1. course-up 基準角: pts[0](START) がキャンバス中心から見て真下になる角
-      // 2. コース長軸(wm vs hm)と canvas 長軸(w vs h)が揃うよう ±90° 調整
-      //    → コースが縦長なら縦長 canvas に、横長なら横長 canvas に自動フィット
+      // ─── 回転: コース種別に応じてSTART位置を固定 ───
+      // 周回コース (circuit): STARTを右下に固定（π/4 = 45°、右下方向）
+      //   → コースが左上・上方向に向かって走り出すイメージ
+      // 非周回コース (ptp):   STARTを真下に固定（π/2 = 90°、真下）
+      //   → コースが上方向に向かっていくイメージ
       ctx.save();
       if (pts.length >= 1) {
         const _cx = w / 2, _cy = h / 2;
         const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
-        let _mapRot = Math.PI / 2 - _phi;
-
-        // コース縦横比 vs canvas 縦横比の比較で 90° 追加回転するか決定
-        const bb = this.bbox;
-        const cosLat = Math.cos(bb.meanLat * Math.PI / 180);
-        const wm = Math.max((bb.maxLon - bb.minLon) * cosLat * 111320, 1);
-        const hm = Math.max((bb.maxLat - bb.minLat) * 111320, 1);
-        const courseAspect = wm / hm;   // >1 = 横長コース, <1 = 縦長コース
-        const canvasAspect = w / h;     // >1 = 横長 canvas, <1 = 縦長 canvas
-        // 長軸が揃っていない(一方が横長で他方が縦長)なら 90° 加算
-        if ((courseAspect > 1) !== (canvasAspect > 1)) {
-          _mapRot += Math.PI / 2;
-        }
-
+        const _target = (this.courseType === 'circuit') ? Math.PI / 4 : 3 * Math.PI / 4;
+        const _mapRot = _target - _phi + (state.mapRotOffset || 0);
         ctx.translate(_cx, _cy);
         ctx.rotate(_mapRot);
         ctx.translate(-_cx, -_cy);
@@ -3388,17 +3395,43 @@ window.addEventListener('error', function(e) {
   max-width: none !important;
 }
 
-/* 凡例: 縦並び・小さい文字 */
+/* 凡例: 縦並び・小さい文字・左上 */
 .course-map-legend {
   flex-direction: column !important;
   gap: 3px !important;
   font-size: 9px !important;
   top: 4px !important;
-  right: 5px !important;
+  left: 5px !important;
+  right: auto !important;
 }
 .cm-dot {
   width: 6px !important;
   height: 6px !important;
+}
+/* 地図回転スライダー（縦画面） */
+.map-rot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+.map-rot-icon {
+  font-size: 14px;
+  color: #7a8499;
+  flex-shrink: 0;
+}
+.map-rot-slider {
+  flex: 1;
+  accent-color: #ffb800;
+  height: 4px;
+  cursor: pointer;
+}
+.map-rot-label {
+  font: 11px 'IBM Plex Mono', monospace;
+  color: #ffb800;
+  min-width: 3.5em;
+  text-align: right;
+  flex-shrink: 0;
 }
 `;
     document.head.appendChild(s);
@@ -3497,7 +3530,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   aspect-ratio:auto !important;border:none !important;border-radius:10px;}
 #pta-ls-mapbox canvas{width:100% !important;height:100% !important;display:block;}
 #pta-ls-mapbox .g-cal-btn,#pta-ls-mapbox #btn-g-cal{display:none !important;}
-#pta-ls-mapbox .course-map-legend{bottom:5px;right:5px;top:auto !important;
+#pta-ls-mapbox .course-map-legend{top:5px !important;left:5px;bottom:auto;right:auto;
   font-size:9px !important;gap:3px !important;opacity:.85;
   flex-direction:column !important;}
 #pta-ls-mapbox .cm-dot{width:6px !important;height:6px !important;}
@@ -3561,6 +3594,12 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   </div>
   <div id="pta-ls-right">
     <div id="pta-ls-mapbox"></div>
+    <div id="pta-ls-rot-row" style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding:2px 0;">
+      <span style="font-size:13px;color:#7a8499;flex-shrink:0;">↻</span>
+      <input type="range" id="pta-ls-rot-slider" min="-180" max="180" step="1" value="0"
+             style="flex:1;accent-color:#ffb800;height:4px;cursor:pointer;">
+      <span id="pta-ls-rot-label" style="font:11px 'IBM Plex Mono',monospace;color:#ffb800;min-width:3em;text-align:right;flex-shrink:0;">0°</span>
+    </div>
     <div id="pta-ls-mgtoggle">
       <button class="pta-ls-mgbtn on" id="pta-ls-mg-map">MAP</button>
       <button class="pta-ls-mgbtn" id="pta-ls-mg-g">G-ball</button>
@@ -3786,6 +3825,30 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
 
     return { check, lockOrientation, unlockOrientation, isActive };
   })();
+
+  // ── 地図回転スライダー: 縦横共通ハンドラ ──────────────────
+  function applyMapRot(deg) {
+    state.mapRotOffset = deg * Math.PI / 180;
+    const s1 = document.getElementById('map-rot-slider');
+    const l1 = document.getElementById('map-rot-label');
+    const s2 = document.getElementById('pta-ls-rot-slider');
+    const l2 = document.getElementById('pta-ls-rot-label');
+    if (s1) s1.value = deg;
+    if (l1) l1.textContent = deg + '°';
+    if (s2) s2.value = deg;
+    if (l2) l2.textContent = deg + '°';
+    // コースIDに紐付けて保存
+    const c = getActiveCourse();
+    if (c) {
+      try { localStorage.setItem('pta_maprot_' + c.id, state.mapRotOffset); } catch (_) {}
+    }
+  }
+
+  document.addEventListener('input', e => {
+    if (e.target.id === 'map-rot-slider' || e.target.id === 'pta-ls-rot-slider') {
+      applyMapRot(parseInt(e.target.value, 10));
+    }
+  });
 
   // ── 走行開始/停止時に向きをロック/解除 ────────────────────
   // btn-start-stop のクリック直後にロック状態を切り替え

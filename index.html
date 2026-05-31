@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.1.9" />
+  <link rel="stylesheet" href="styles.css?v=2.2.2" />
 </head>
 <body>
 
@@ -541,6 +541,14 @@ so inaccuracies may occur depending on the environment.</div>
         </div>
       </div>
 
+      <!-- ─── 地図回転スライダー ─── -->
+      <div class="map-rot-row">
+        <span class="map-rot-icon">↻</span>
+        <input type="range" id="map-rot-slider" class="map-rot-slider"
+               min="-180" max="180" step="1" value="0">
+        <span id="map-rot-label" class="map-rot-label">0°</span>
+      </div>
+
       <div id="splits-grid" class="splits-grid"></div>
 
       <div class="drive-footer">
@@ -564,6 +572,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.1.9"></script>
+  <script src="app.js?v=2.2.2"></script>
 </body>
 </html>
