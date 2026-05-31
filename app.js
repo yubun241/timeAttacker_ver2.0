@@ -2648,7 +2648,15 @@ window.addEventListener('error', function(e) {
               state.gball.draw(state.g_lat, state.g_lon);
             }
             if (state.courseMap) state.courseMap.draw();
-          } catch (_) {}
+          } catch (e) {
+            // エラーを画面に表示 (一度だけ)
+            if (!window.__cmDrawErr) {
+              window.__cmDrawErr = true;
+              if (typeof toast === 'function') {
+                toast('DRAW ERR: ' + e.message);
+              }
+            }
+          }
         }
         state.rafId = requestAnimationFrame(tick);
         return;
@@ -2998,6 +3006,25 @@ window.addEventListener('error', function(e) {
       ctx.strokeStyle = '#ff3333';
       ctx.lineWidth = 2;
       ctx.strokeRect(1, 1, w - 2, h - 2);
+
+      // ── ハードコード4点 (canvas 座標系の検証) ──
+      ctx.fillStyle = '#ff00ff';
+      ctx.beginPath(); ctx.arc(10, 10, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(w - 10, 10, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(10, h - 10, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(w - 10, h - 10, 4, 0, Math.PI * 2); ctx.fill();
+
+      // ── 値情報 (_project の結果検証) ──
+      ctx.fillStyle = '#0f0';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('wp:' + this.waypoints.length + ' pts:' + pts.length, 14, 14);
+      ctx.fillText('w/h:' + Math.round(this.w) + '/' + Math.round(this.h), 14, 26);
+      ctx.fillText('bb:' + (this.bbox ? Math.round((this.bbox.maxLat-this.bbox.minLat)*1e5)/1e5 + ',' + Math.round((this.bbox.maxLon-this.bbox.minLon)*1e5)/1e5 : 'no'), 14, 38);
+      if (pts.length > 0) {
+        ctx.fillText('p0:' + Math.round(pts[0].x) + ',' + Math.round(pts[0].y), 14, 50);
+        if (pts.length > 1) ctx.fillText('p1:' + Math.round(pts[1].x) + ',' + Math.round(pts[1].y), 14, 62);
+      }
 
       // ─── 骨格描画: OSRM 道なり経路があれば優先、無ければ直線フォールバック ───
       if (this.routePts && this.routePts.length >= 2) {
