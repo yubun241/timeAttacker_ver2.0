@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.2.2" />
+  <link rel="stylesheet" href="styles.css?v=2.2.4" />
 </head>
 <body>
 
@@ -541,12 +541,15 @@ so inaccuracies may occur depending on the environment.</div>
         </div>
       </div>
 
-      <!-- ─── 地図回転スライダー ─── -->
+      <!-- ─── 地図回転スライダー + Gボール値 ─── -->
       <div class="map-rot-row">
-        <span class="map-rot-icon">↻</span>
-        <input type="range" id="map-rot-slider" class="map-rot-slider"
-               min="-180" max="180" step="1" value="0">
-        <span id="map-rot-label" class="map-rot-label">0°</span>
+        <div class="map-rot-slider-wrap">
+          <span class="map-rot-icon">↻</span>
+          <input type="range" id="map-rot-slider" class="map-rot-slider"
+                 min="-180" max="180" step="1" value="0">
+          <span id="map-rot-label" class="map-rot-label">0°</span>
+        </div>
+        <div class="map-rot-gval" id="map-rot-gval">0.00 G</div>
       </div>
 
       <div id="splits-grid" class="splits-grid"></div>
@@ -572,6 +575,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.2.2"></script>
+  <script src="app.js?v=2.2.4"></script>
 </body>
 </html>

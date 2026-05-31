@@ -2171,10 +2171,6 @@ window.addEventListener('error', function(e) {
     const _rotDeg = Math.round(state.mapRotOffset * 180 / Math.PI);
     if (_rotSlider) _rotSlider.value = _rotDeg;
     if (_rotLabel)  _rotLabel.textContent = _rotDeg + '°';
-    const _lsSlider = document.getElementById('pta-ls-rot-slider');
-    const _lsLabel  = document.getElementById('pta-ls-rot-label');
-    if (_lsSlider) _lsSlider.value = _rotDeg;
-    if (_lsLabel)  _lsLabel.textContent = _rotDeg + '°';
 
     // CSV buffer
     state.csvRows = [];
@@ -2749,6 +2745,9 @@ window.addEventListener('error', function(e) {
             const tg = Math.min(Math.sqrt(state.g_lat * state.g_lat + state.g_lon * state.g_lon), G_RANGE);
             const gt = document.getElementById('g-text');
             if (gt) gt.textContent = `${tg.toFixed(2)} G`;
+            // スライダー横のG値表示も更新
+            const gv = document.getElementById('map-rot-gval');
+            if (gv) gv.textContent = `${tg.toFixed(2)} G`;
           }
           // コースマップ (ゲートから自動描画 + 現在地赤丸 + ベスト青丸)
           if (state.courseMap) state.courseMap.draw();
@@ -3382,7 +3381,8 @@ window.addEventListener('error', function(e) {
   aspect-ratio: auto !important;
   min-height: 0;
 }
-/* G-ball ラッパー: 正方形を維持しながら横に並べる */
+/* G-ball 枠内の数値テキストを非表示（スライダー横に統一） */
+.gball-cell #g-text { display: none !important; }
 .map-gball-row .sensors-row {
   flex: 0 0 auto;
   width: 38%;
@@ -3408,12 +3408,20 @@ window.addEventListener('error', function(e) {
   width: 6px !important;
   height: 6px !important;
 }
-/* 地図回転スライダー（縦画面） */
+/* 地図回転スライダー行（縦画面） */
 .map-rot-row {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
   padding: 4px 0 2px;
+}
+/* スライダー部分: MAP と同じ flex:1 幅 */
+.map-rot-slider-wrap {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .map-rot-icon {
   font-size: 14px;
@@ -3425,13 +3433,23 @@ window.addEventListener('error', function(e) {
   accent-color: #ffb800;
   height: 4px;
   cursor: pointer;
+  min-width: 0;
 }
 .map-rot-label {
   font: 11px 'IBM Plex Mono', monospace;
   color: #ffb800;
-  min-width: 3.5em;
+  min-width: 3em;
   text-align: right;
   flex-shrink: 0;
+}
+/* G値表示: G-ball と同じ 38% 幅 */
+.map-rot-gval {
+  flex: 0 0 38%;
+  max-width: 180px;
+  text-align: center;
+  font: bold 16px 'IBM Plex Mono', monospace;
+  color: #e0e6f0;
+  letter-spacing: 0.04em;
 }
 `;
     document.head.appendChild(s);
@@ -3594,12 +3612,6 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   </div>
   <div id="pta-ls-right">
     <div id="pta-ls-mapbox"></div>
-    <div id="pta-ls-rot-row" style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding:2px 0;">
-      <span style="font-size:13px;color:#7a8499;flex-shrink:0;">↻</span>
-      <input type="range" id="pta-ls-rot-slider" min="-180" max="180" step="1" value="0"
-             style="flex:1;accent-color:#ffb800;height:4px;cursor:pointer;">
-      <span id="pta-ls-rot-label" style="font:11px 'IBM Plex Mono',monospace;color:#ffb800;min-width:3em;text-align:right;flex-shrink:0;">0°</span>
-    </div>
     <div id="pta-ls-mgtoggle">
       <button class="pta-ls-mgbtn on" id="pta-ls-mg-map">MAP</button>
       <button class="pta-ls-mgbtn" id="pta-ls-mg-g">G-ball</button>
@@ -3831,12 +3843,8 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
     state.mapRotOffset = deg * Math.PI / 180;
     const s1 = document.getElementById('map-rot-slider');
     const l1 = document.getElementById('map-rot-label');
-    const s2 = document.getElementById('pta-ls-rot-slider');
-    const l2 = document.getElementById('pta-ls-rot-label');
     if (s1) s1.value = deg;
     if (l1) l1.textContent = deg + '°';
-    if (s2) s2.value = deg;
-    if (l2) l2.textContent = deg + '°';
     // コースIDに紐付けて保存
     const c = getActiveCourse();
     if (c) {
@@ -3845,7 +3853,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   }
 
   document.addEventListener('input', e => {
-    if (e.target.id === 'map-rot-slider' || e.target.id === 'pta-ls-rot-slider') {
+    if (e.target.id === 'map-rot-slider') {
       applyMapRot(parseInt(e.target.value, 10));
     }
   });
