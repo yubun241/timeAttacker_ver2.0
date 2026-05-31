@@ -3387,6 +3387,19 @@ window.addEventListener('error', function(e) {
   width: 100% !important;
   max-width: none !important;
 }
+
+/* 凡例: 縦並び・小さい文字 */
+.course-map-legend {
+  flex-direction: column !important;
+  gap: 3px !important;
+  font-size: 9px !important;
+  top: 4px !important;
+  right: 5px !important;
+}
+.cm-dot {
+  width: 6px !important;
+  height: 6px !important;
+}
 `;
     document.head.appendChild(s);
   })();
@@ -3484,8 +3497,10 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
   aspect-ratio:auto !important;border:none !important;border-radius:10px;}
 #pta-ls-mapbox canvas{width:100% !important;height:100% !important;display:block;}
 #pta-ls-mapbox .g-cal-btn,#pta-ls-mapbox #btn-g-cal{display:none !important;}
-#pta-ls-mapbox .course-map-legend{bottom:6px;right:6px;top:auto !important;
-  font-size:10px;gap:8px;opacity:.85;}
+#pta-ls-mapbox .course-map-legend{bottom:5px;right:5px;top:auto !important;
+  font-size:9px !important;gap:3px !important;opacity:.85;
+  flex-direction:column !important;}
+#pta-ls-mapbox .cm-dot{width:6px !important;height:6px !important;}
 #pta-ls-mgtoggle{display:flex;gap:6px;flex-shrink:0;}
 .pta-ls-mgbtn{flex:1;background:#12161e;border:1px solid #2a3040;border-radius:10px;
   color:#9aa4b2;padding:10px 0;font:bold 13px sans-serif;cursor:pointer;}
