@@ -2994,19 +2994,10 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
-      // ─── START を画面下端に固定: course-up 回転 ───
-      // pts[0] (START) がキャンバス中心から見て真下 (π/2) になるように
-      // ctx を回転させ、走行方向が画面上を向くようにする
-      let _mapRot = 0;
-      if (pts.length >= 1) {
-        const _cx = w / 2, _cy = h / 2;
-        const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
-        _mapRot = Math.PI / 2 - _phi;
-        ctx.save();
-        ctx.translate(_cx, _cy);
-        ctx.rotate(_mapRot);
-        ctx.translate(-_cx, -_cy);
-      }
+      // ── 診断マーカー: canvas が描画されていることを確認 ──
+      ctx.strokeStyle = '#ff3333';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w - 2, h - 2);
 
       // ─── 骨格描画: OSRM 道なり経路があれば優先、無ければ直線フォールバック ───
       if (this.routePts && this.routePts.length >= 2) {
@@ -3062,9 +3053,6 @@ window.addEventListener('error', function(e) {
           ctx.beginPath(); ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2); ctx.stroke();
         }
       }
-
-      // 回転を解除
-      if (_mapRot) ctx.restore();
     }
   }
 
