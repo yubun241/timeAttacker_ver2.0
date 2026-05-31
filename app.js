@@ -2994,22 +2994,6 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
-      // ── 診断: 強制的に目立つマーカーを描画 (回転前) ──
-      // この赤枠と中央の十字が見えれば、canvas は描画されている
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(2, 2, w - 4, h - 4);
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(w/2 - 20, h/2); ctx.lineTo(w/2 + 20, h/2);
-      ctx.moveTo(w/2, h/2 - 20); ctx.lineTo(w/2, h/2 + 20);
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('w=' + Math.round(w) + ' h=' + Math.round(h) + ' pts=' + pts.length, w/2, 14);
-
       // ─── START を画面下端に固定: course-up 回転 ───
       // pts[0] (START) がキャンバス中心から見て真下 (π/2) になるように
       // ctx を回転させ、走行方向が画面上を向くようにする
@@ -3028,7 +3012,7 @@ window.addEventListener('error', function(e) {
       if (this.routePts && this.routePts.length >= 2) {
         const rp = this.routePts.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
         if (rp.length >= 2) {
-          ctx.strokeStyle = '#5b6878';
+          ctx.strokeStyle = '#9aa4b2';
           ctx.lineWidth = 4;
           ctx.lineJoin = 'round'; ctx.lineCap = 'round';
           ctx.beginPath();
@@ -3036,17 +3020,17 @@ window.addEventListener('error', function(e) {
           ctx.stroke();
         }
       } else if (pts.length >= 2) {
-        ctx.strokeStyle = '#3a4452';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#9aa4b2';
+        ctx.lineWidth = 4;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
         ctx.beginPath();
         pts.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
         ctx.stroke();
       }
-      // ゲート点
+      // ゲート点 (明るい色で大きめに)
       pts.forEach((p, i) => {
-        ctx.fillStyle = (i === 0) ? '#22e54a' : (i === pts.length - 1 ? '#ffb000' : '#5a6472');
-        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = (i === 0) ? '#22e54a' : (i === pts.length - 1 ? '#ffb000' : '#bfe6ff');
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill();
       });
 
       // 🔵 ベストゴースト (青丸)
@@ -3643,33 +3627,6 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       } catch (e) {}
       try {
         if (state.gball && typeof state.gball.resize === 'function') state.gball.resize();
-      } catch (e) {}
-
-      // ── デバッグ情報: MAPが見えない時に状態を画面表示 ──
-      try {
-        let dbg = document.getElementById('pta-ls-mapdbg');
-        if (!dbg) {
-          dbg = document.createElement('div');
-          dbg.id = 'pta-ls-mapdbg';
-          dbg.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,0,0,.7);color:#0f0;font:9px monospace;padding:3px 6px;z-index:99;pointer-events:none;border-radius:3px;line-height:1.4;';
-          box.appendChild(dbg);
-        }
-        const cm = state.courseMap;
-        const cmw = mcv ? mcv.getBoundingClientRect() : null;
-        const ts = mcv ? mcv.getContext('2d').getTransform() : null;
-        const lines = [
-          'box: ' + Math.round(r.width) + 'x' + Math.round(r.height),
-          'mcv attr: ' + (mcv ? mcv.width + 'x' + mcv.height : 'null'),
-          'mcv rect: ' + (cmw ? Math.round(cmw.width) + 'x' + Math.round(cmw.height) : 'null'),
-          'cm.w/h: ' + (cm ? Math.round(cm.w) + 'x' + Math.round(cm.h) : 'NULL'),
-          'wp: ' + (cm ? (cm.waypoints || []).length : '-') +
-                  '/draws: ' + (window.__cmDrawCount || 0),
-          'tx: ' + (ts ? ts.a.toFixed(1) + ',' + ts.d.toFixed(1) : '-'),
-          'route: ' + (cm && cm.routePts ? cm.routePts.length : 'none'),
-          'pts0: ' + (window.__cmPts0 || '-'),
-          'view: ' + mgView,
-        ];
-        dbg.innerHTML = lines.join('<br>');
       } catch (e) {}
     }
 
