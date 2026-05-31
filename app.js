@@ -3629,6 +3629,28 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       try {
         if (state.gball && typeof state.gball.resize === 'function') state.gball.resize();
       } catch (e) {}
+
+      // ── デバッグ情報: MAPが見えない時に状態を画面表示 ──
+      try {
+        let dbg = document.getElementById('pta-ls-mapdbg');
+        if (!dbg) {
+          dbg = document.createElement('div');
+          dbg.id = 'pta-ls-mapdbg';
+          dbg.style.cssText = 'position:absolute;top:4px;left:4px;background:rgba(0,0,0,.7);color:#0f0;font:9px monospace;padding:3px 6px;z-index:99;pointer-events:none;border-radius:3px;line-height:1.4;';
+          box.appendChild(dbg);
+        }
+        const cm = state.courseMap;
+        const lines = [
+          'box: ' + Math.round(r.width) + 'x' + Math.round(r.height),
+          'mcv: ' + (mcv ? mcv.width + 'x' + mcv.height : 'null'),
+          'cm: ' + (cm ? 'exists' : 'NULL'),
+          'wp: ' + (cm ? (cm.waypoints || []).length : '-'),
+          'route: ' + (cm && cm.routePts ? cm.routePts.length : 'none'),
+          'bbox: ' + (cm && cm.bbox ? 'yes' : 'NO'),
+          'view: ' + mgView,
+        ];
+        dbg.innerHTML = lines.join('<br>');
+      } catch (e) {}
     }
 
     // ── 横画面オーバーレイ ON ─────────────────────────────
