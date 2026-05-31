@@ -3717,7 +3717,12 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
         show(gcell); hide(mcell);
         if (btnG) btnG.classList.add('on');
         if (btnM) btnM.classList.remove('on');
-        if (gval) gval.style.display = '';
+        // G値オーバーレイを gball-cell 内に移動して確実に枠内右下に表示
+        if (gval) {
+          const gcell2 = document.querySelector('.gball-cell');
+          if (gcell2 && gval.parentNode !== gcell2) gcell2.appendChild(gval);
+          gval.style.display = '';
+        }
       }
       const kick = () => { try { window.dispatchEvent(new Event('resize')); } catch (e) {} };
       requestAnimationFrame(() => requestAnimationFrame(kick));
