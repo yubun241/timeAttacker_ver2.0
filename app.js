@@ -3611,7 +3611,14 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
     </div>
   </div>
   <div id="pta-ls-right">
-    <div id="pta-ls-mapbox"></div>
+    <div id="pta-ls-mapbox">
+      <div id="pta-ls-gval" style="
+        position:absolute;bottom:6px;right:8px;z-index:10;
+        font:bold 14px 'IBM Plex Mono',monospace;color:#e0e6f0;
+        background:rgba(9,11,15,.72);border-radius:4px;
+        padding:2px 6px;pointer-events:none;letter-spacing:.04em;
+      ">0.00 G</div>
+    </div>
     <div id="pta-ls-mgtoggle">
       <button class="pta-ls-mgbtn on" id="pta-ls-mg-map">MAP</button>
       <button class="pta-ls-mgbtn" id="pta-ls-mg-g">G-ball</button>
@@ -3700,14 +3707,17 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       const btnG = document.getElementById('pta-ls-mg-g');
       const show = (el) => { if (el) { el.style.opacity = '1'; el.style.zIndex = '2'; el.style.pointerEvents = 'auto'; } };
       const hide = (el) => { if (el) { el.style.opacity = '0'; el.style.zIndex = '1'; el.style.pointerEvents = 'none'; } };
+      const gval = document.getElementById('pta-ls-gval');
       if (view === 'map') {
         show(mcell); hide(gcell);
         if (btnM) btnM.classList.add('on');
         if (btnG) btnG.classList.remove('on');
+        if (gval) gval.style.display = 'none';
       } else {
         show(gcell); hide(mcell);
         if (btnG) btnG.classList.add('on');
         if (btnM) btnM.classList.remove('on');
+        if (gval) gval.style.display = '';
       }
       const kick = () => { try { window.dispatchEvent(new Event('resize')); } catch (e) {} };
       requestAnimationFrame(() => requestAnimationFrame(kick));
@@ -3786,6 +3796,8 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       s('pta-ls-fin',    fmt2(g('finish-countdown')));
       s('pta-ls-rec',    fmt2(g('best-lap-time')));
       s('pta-ls-lst',    fmt2(g('last-lap-time')));
+      // G 値を右下オーバーレイへ同期（map-rot-gval から取得）
+      s('pta-ls-gval',   g('map-rot-gval'));
       // START/STOP ボタン同期
       const ss = document.getElementById('pta-ls-ss');
       const so = document.getElementById('btn-start-stop');
