@@ -2648,15 +2648,7 @@ window.addEventListener('error', function(e) {
               state.gball.draw(state.g_lat, state.g_lon);
             }
             if (state.courseMap) state.courseMap.draw();
-          } catch (e) {
-            // エラーを画面に表示 (一度だけ)
-            if (!window.__cmDrawErr) {
-              window.__cmDrawErr = true;
-              if (typeof toast === 'function') {
-                toast('DRAW ERR: ' + e.message);
-              }
-            }
-          }
+          } catch (_) {}
         }
         state.rafId = requestAnimationFrame(tick);
         return;
@@ -2871,8 +2863,13 @@ window.addEventListener('error', function(e) {
     _mid(line) {
       if (!line || line.length < 2) return null;
       const a = line[0], b = line[1];
-      const alat = a.lat, alon = (a.lon != null ? a.lon : a.lng);
-      const blat = b.lat, blon = (b.lon != null ? b.lon : b.lng);
+      if (!a || !b) return null;
+      // 線データは配列 [lat, lng] または オブジェクト {lat, lng/lon} の両形式に対応
+      const alat = Array.isArray(a) ? a[0] : a.lat;
+      const alon = Array.isArray(a) ? a[1] : (a.lon != null ? a.lon : a.lng);
+      const blat = Array.isArray(b) ? b[0] : b.lat;
+      const blon = Array.isArray(b) ? b[1] : (b.lon != null ? b.lon : b.lng);
+      if (!isFinite(alat) || !isFinite(alon) || !isFinite(blat) || !isFinite(blon)) return null;
       return { lat: (alat + blat) / 2, lon: (alon + blon) / 2 };
     }
     // コースを受け取り、ゲート中点とゴースト時刻列を構築
@@ -3002,28 +2999,15 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
-      // ── 診断マーカー: canvas が描画されていることを確認 ──
-      ctx.strokeStyle = '#ff3333';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(1, 1, w - 2, h - 2);
-
-      // ── ハードコード4点 (canvas 座標系の検証) ──
-      ctx.fillStyle = '#ff00ff';
-      ctx.beginPath(); ctx.arc(10, 10, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(w - 10, 10, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(10, h - 10, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(w - 10, h - 10, 4, 0, Math.PI * 2); ctx.fill();
-
-      // ── 値情報 (_project の結果検証) ──
-      ctx.fillStyle = '#0f0';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('wp:' + this.waypoints.length + ' pts:' + pts.length, 14, 14);
-      ctx.fillText('w/h:' + Math.round(this.w) + '/' + Math.round(this.h), 14, 26);
-      ctx.fillText('bb:' + (this.bbox ? Math.round((this.bbox.maxLat-this.bbox.minLat)*1e5)/1e5 + ',' + Math.round((this.bbox.maxLon-this.bbox.minLon)*1e5)/1e5 : 'no'), 14, 38);
-      if (pts.length > 0) {
-        ctx.fillText('p0:' + Math.round(pts[0].x) + ',' + Math.round(pts[0].y), 14, 50);
-        if (pts.length > 1) ctx.fillText('p1:' + Math.round(pts[1].x) + ',' + Math.round(pts[1].y), 14, 62);
+      // ─── START を画面下端に固定: course-up 回転 ───
+      ctx.save();
+      if (pts.length >= 1) {
+        const _cx = w / 2, _cy = h / 2;
+        const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
+        const _mapRot = Math.PI / 2 - _phi;
+        ctx.translate(_cx, _cy);
+        ctx.rotate(_mapRot);
+        ctx.translate(-_cx, -_cy);
       }
 
       // ─── 骨格描画: OSRM 道なり経路があれば優先、無ければ直線フォールバック ───
@@ -3080,6 +3064,9 @@ window.addEventListener('error', function(e) {
           ctx.beginPath(); ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2); ctx.stroke();
         }
       }
+
+      // 回転を解除 (save と必ずペア)
+      ctx.restore();
     }
   }
 
