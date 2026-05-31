@@ -1216,8 +1216,11 @@ window.addEventListener('error', function(e) {
   function extractLapPoints(s, lapNum, col) {
     const pts = [];
     const isAll = (lapNum === -1);
+    // state.lapNumber は finalizeLap 後に +1 されるため
+    // ラップ N の走行行は r[5] = N-1 で記録されている
+    const rowLap = isAll ? -1 : (lapNum - 1);
     for (const r of s.rows) {
-      if (!isAll && parseInt(r[5], 10) !== lapNum) continue;
+      if (!isAll && parseInt(r[5], 10) !== rowLap) continue;
       const lat = parseFloat(r[1]);
       const lon = parseFloat(r[2]);
       if (!isFinite(lat) || !isFinite(lon)) continue;
@@ -2637,43 +2640,41 @@ window.addEventListener('error', function(e) {
     function tick() {
       if (state.view !== 'drive') return;
 
-      // ─── 横画面オーバーレイがアクティブな間は、縦画面のテキストDOM更新だけスキップ
-      //     Canvas (G-ball / コースマップ) は横画面の右上ボックスに移設されているため
-      //     描画ループは継続させる必要がある。
-      //     データ取得 (state.* への書き込み) は GPS/motion handler 側で継続。
-      // ─────────────────────────────────────────────────────────────
-      if (typeof Landscape !== 'undefined' && Landscape.isActive && Landscape.isActive()) {
-        const now = Date.now();
-        const c = getActiveCourse();
-        // セッション時間切れ判定だけは実行 (ラップ完了は GPS handler 側で動く)
-        if (state.driveActive && c?.duration > 0 && state.driveStartT != null) {
-          const remaining = c.duration * 1000 - (now - state.driveStartT);
-          if (remaining <= 0) {
-            finishSession();
-            toast('⏱ セッション時間終了');
-          }
-        }
+      // ─── 横画面アクティブ時: Canvas描画は継続、縦画面テキストDOM更新はスキップ
+      //     ただしタイマー計算・ゲート通過検知・セッション時間切れ判定は必ず実行
+      // ──────────────────────────────────────────────────────────────────────────
+      const _lsActive = typeof Landscape !== 'undefined' && Landscape.isActive && Landscape.isActive();
+
+      if (_lsActive) {
         // Canvas 描画は継続 (横画面右上ボックスへ移設されている)
         _tickFrame = (_tickFrame + 1) % 3;
         if (_tickFrame === 0) {
           try {
-            if (state.gball) {
-              state.gball.draw(state.g_lat, state.g_lon);
-            }
+            if (state.gball) state.gball.draw(state.g_lat, state.g_lon);
             if (state.courseMap) state.courseMap.draw();
           } catch (_) {}
         }
-        state.rafId = requestAnimationFrame(tick);
-        return;
       }
 
       const now = Date.now();
       const c = getActiveCourse();
 
-      // Lap timer
+      // セッション時間切れ判定
+      if (state.driveActive && c?.duration > 0 && state.driveStartT != null) {
+        const remaining = c.duration * 1000 - (now - state.driveStartT);
+        if (remaining <= 0) {
+          finishSession();
+          toast('⏱ セッション時間終了');
+        }
+      }
+
+      // Lap timer — 横画面でも計算し、縦画面DOMと横画面DOMの両方を更新
+
+      // Lap timer — 横画面でも計算し、縦画面DOMと横画面DOMの両方を更新
       if (state.lapStarted && state.lapStartT != null) {
         const elapsed = now - state.lapStartT;
-        document.getElementById('current-lap-time').textContent = formatTime(elapsed);
+        const timeStr = formatTime(elapsed);
+        document.getElementById('current-lap-time').textContent = timeStr;
 
         // toNextSector: target Δ for current section
         if (c && c.sections && state.currentSectorIdx < c.sections.length) {
