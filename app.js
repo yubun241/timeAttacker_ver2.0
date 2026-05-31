@@ -3801,8 +3801,12 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       s('pta-ls-fin',    fmt2(g('finish-countdown')));
       s('pta-ls-rec',    fmt2(g('best-lap-time')));
       s('pta-ls-lst',    fmt2(g('last-lap-time')));
-      // G 値を右下オーバーレイへ同期（map-rot-gval から取得）
-      s('pta-ls-gval',   g('map-rot-gval'));
+      // G 値を直接計算して右下オーバーレイへ同期
+      const _tg = Math.min(
+        Math.sqrt((state.g_lat||0)*(state.g_lat||0) + (state.g_lon||0)*(state.g_lon||0)),
+        G_RANGE
+      );
+      s('pta-ls-gval', _tg.toFixed(2) + ' G');
       // START/STOP ボタン同期
       const ss = document.getElementById('pta-ls-ss');
       const so = document.getElementById('btn-start-stop');
