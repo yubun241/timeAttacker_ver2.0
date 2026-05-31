@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.1.6" />
+  <link rel="stylesheet" href="styles.css?v=2.1.7" />
 </head>
 <body>
 
@@ -522,20 +522,22 @@ so inaccuracies may occur depending on the environment.</div>
         <div id="current-lap-time" class="time-display">00:00.000</div>
       </div>
 
-      <!-- ─── コースマップ (ゲートから自動描画) ─── -->
-      <div class="course-map-cell">
-        <canvas id="course-canvas" width="640" height="420"></canvas>
-        <div class="course-map-legend">
-          <span class="cm-legend-item"><span class="cm-dot cm-dot-now"></span>現在</span>
-          <span class="cm-legend-item"><span class="cm-dot cm-dot-best"></span>ベスト</span>
+      <!-- ─── コースマップ + G-ball 横並び ─── -->
+      <div class="map-gball-row">
+        <div class="course-map-cell">
+          <canvas id="course-canvas" width="640" height="420"></canvas>
+          <div class="course-map-legend">
+            <span class="cm-legend-item"><span class="cm-dot cm-dot-now"></span>現在</span>
+            <span class="cm-legend-item"><span class="cm-dot cm-dot-best"></span>ベスト</span>
+          </div>
         </div>
-      </div>
 
-      <div class="sensors-row">
-        <div class="sensor-cell gball-cell">
-          <canvas id="gball-canvas" width="320" height="320"></canvas>
-          <button id="btn-g-cal" class="g-cal-btn" title="G ゼロ点補正">ZERO</button>
-          <div class="g-text" id="g-text">0.00 G</div>
+        <div class="sensors-row">
+          <div class="sensor-cell gball-cell">
+            <canvas id="gball-canvas" width="320" height="320"></canvas>
+            <button id="btn-g-cal" class="g-cal-btn" title="G ゼロ点補正">ZERO</button>
+            <div class="g-text" id="g-text">0.00 G</div>
+          </div>
         </div>
       </div>
 
@@ -562,6 +564,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.1.6"></script>
+  <script src="app.js?v=2.1.7"></script>
 </body>
 </html>

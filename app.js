@@ -3338,8 +3338,44 @@ window.addEventListener('error', function(e) {
   // ============================================================
   // INIT
   // ============================================================
+  // ── 縦画面: MAP + G-ball 横並びレイアウト CSS ──
+  (function () {
+    if (document.getElementById('pta-portrait-css')) return;
+    const s = document.createElement('style');
+    s.id = 'pta-portrait-css';
+    s.textContent = `
+/* MAP + G-ball 横並びラッパー */
+.map-gball-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+  min-height: 0;
+}
+/* MAP: 横幅を flex で広げ、aspect-ratio を外してラッパーの高さに合わせる */
+.map-gball-row .course-map-cell {
+  flex: 1 1 0;
+  margin-top: 0 !important;
+  aspect-ratio: auto !important;
+  min-height: 0;
+}
+/* G-ball ラッパー: 正方形を維持しながら横に並べる */
+.map-gball-row .sensors-row {
+  flex: 0 0 auto;
+  width: 38%;
+  max-width: 180px;
+  margin-top: 0 !important;
+  justify-content: flex-start;
+}
+.map-gball-row .sensor-cell.gball-cell {
+  width: 100% !important;
+  max-width: none !important;
+}
+`;
+    document.head.appendChild(s);
+  })();
+
   renderHome();
-  updateOrientation();   // 起動時に向きを判定して body.landscape を設定
   // ============================================================
   // SPLASH → WARNING 自動遷移（2秒）
   // ============================================================
