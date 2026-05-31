@@ -2994,6 +2994,22 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
+      // ── 診断: 強制的に目立つマーカーを描画 (回転前) ──
+      // この赤枠と中央の十字が見えれば、canvas は描画されている
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(2, 2, w - 4, h - 4);
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(w/2 - 20, h/2); ctx.lineTo(w/2 + 20, h/2);
+      ctx.moveTo(w/2, h/2 - 20); ctx.lineTo(w/2, h/2 + 20);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('w=' + Math.round(w) + ' h=' + Math.round(h) + ' pts=' + pts.length, w/2, 14);
+
       // ─── START を画面下端に固定: course-up 回転 ───
       // pts[0] (START) がキャンバス中心から見て真下 (π/2) になるように
       // ctx を回転させ、走行方向が画面上を向くようにする
@@ -3423,13 +3439,12 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
 #pta-ls-mapbox{position:relative;width:100%;flex:1 1 0;min-height:0;
   background:#0d1118;border:1px solid #1c2230;border-radius:10px;overflow:hidden;}
 #pta-ls-mapbox .course-map-cell,#pta-ls-mapbox .gball-cell{
-  position:absolute !important;inset:0 !important;
-  width:100% !important;height:100% !important;
+  position:absolute !important;top:0 !important;left:0 !important;
+  right:0 !important;bottom:0 !important;
+  width:auto !important;height:auto !important;
   max-width:none !important;min-width:0 !important;margin:0 !important;
   aspect-ratio:auto !important;border:none !important;border-radius:10px;}
-#pta-ls-mapbox canvas{
-  width:100% !important;height:100% !important;display:block;
-  position:absolute !important;inset:0 !important;}
+#pta-ls-mapbox canvas{width:100% !important;height:100% !important;display:block;}
 #pta-ls-mapbox .g-cal-btn,#pta-ls-mapbox #btn-g-cal{display:none !important;}
 #pta-ls-mapbox .course-map-legend{bottom:6px;right:6px;top:auto !important;
   font-size:10px;gap:8px;opacity:.85;}
@@ -3640,13 +3655,18 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
           box.appendChild(dbg);
         }
         const cm = state.courseMap;
+        const cmw = mcv ? mcv.getBoundingClientRect() : null;
+        const ts = mcv ? mcv.getContext('2d').getTransform() : null;
         const lines = [
           'box: ' + Math.round(r.width) + 'x' + Math.round(r.height),
-          'mcv: ' + (mcv ? mcv.width + 'x' + mcv.height : 'null'),
-          'cm: ' + (cm ? 'exists' : 'NULL'),
-          'wp: ' + (cm ? (cm.waypoints || []).length : '-'),
+          'mcv attr: ' + (mcv ? mcv.width + 'x' + mcv.height : 'null'),
+          'mcv rect: ' + (cmw ? Math.round(cmw.width) + 'x' + Math.round(cmw.height) : 'null'),
+          'cm.w/h: ' + (cm ? Math.round(cm.w) + 'x' + Math.round(cm.h) : 'NULL'),
+          'wp: ' + (cm ? (cm.waypoints || []).length : '-') +
+                  '/draws: ' + (window.__cmDrawCount || 0),
+          'tx: ' + (ts ? ts.a.toFixed(1) + ',' + ts.d.toFixed(1) : '-'),
           'route: ' + (cm && cm.routePts ? cm.routePts.length : 'none'),
-          'bbox: ' + (cm && cm.bbox ? 'yes' : 'NO'),
+          'pts0: ' + (window.__cmPts0 || '-'),
           'view: ' + mgView,
         ];
         dbg.innerHTML = lines.join('<br>');
