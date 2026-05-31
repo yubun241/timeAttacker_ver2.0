@@ -2981,7 +2981,7 @@ window.addEventListener('error', function(e) {
     }
     draw() {
       const ctx = this.ctx, w = this.w, h = this.h;
-      const pad = 24;
+      const pad = 8;   // 余白を最小化 → 描画エリア最大化
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, w, h);
@@ -2999,12 +2999,28 @@ window.addEventListener('error', function(e) {
       // コース骨格 (灰線)
       const pts = this.waypoints.map(p => this._project(p.lat, p.lon, pad)).filter(Boolean);
 
-      // ─── START を画面下端に固定: course-up 回転 ───
+      // ─── 回転: START を下に固定しつつ、コース長軸を canvas 長軸に合わせる ───
+      // 1. course-up 基準角: pts[0](START) がキャンバス中心から見て真下になる角
+      // 2. コース長軸(wm vs hm)と canvas 長軸(w vs h)が揃うよう ±90° 調整
+      //    → コースが縦長なら縦長 canvas に、横長なら横長 canvas に自動フィット
       ctx.save();
       if (pts.length >= 1) {
         const _cx = w / 2, _cy = h / 2;
         const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
-        const _mapRot = Math.PI / 2 - _phi;
+        let _mapRot = Math.PI / 2 - _phi;
+
+        // コース縦横比 vs canvas 縦横比の比較で 90° 追加回転するか決定
+        const bb = this.bbox;
+        const cosLat = Math.cos(bb.meanLat * Math.PI / 180);
+        const wm = Math.max((bb.maxLon - bb.minLon) * cosLat * 111320, 1);
+        const hm = Math.max((bb.maxLat - bb.minLat) * 111320, 1);
+        const courseAspect = wm / hm;   // >1 = 横長コース, <1 = 縦長コース
+        const canvasAspect = w / h;     // >1 = 横長 canvas, <1 = 縦長 canvas
+        // 長軸が揃っていない(一方が横長で他方が縦長)なら 90° 加算
+        if ((courseAspect > 1) !== (canvasAspect > 1)) {
+          _mapRot += Math.PI / 2;
+        }
+
         ctx.translate(_cx, _cy);
         ctx.rotate(_mapRot);
         ctx.translate(-_cx, -_cy);
