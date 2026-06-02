@@ -135,6 +135,13 @@ window.addEventListener('error', function(e) {
     return `${sign}${(Math.abs(ms) / 1000).toFixed(3)}`;
   }
 
+  // 差分を秒単位（小数点以下なし）で表示: +5 / −12 など
+  function formatDeltaNoMs(ms) {
+    if (ms == null || !isFinite(ms)) return '';
+    const sign = ms >= 0 ? '+' : '−';
+    return `${sign}${Math.floor(Math.abs(ms) / 1000)}`;
+  }
+
   /**
    * Parse MMSS.CC numeric input → ms
    * Accepts:
@@ -2141,6 +2148,43 @@ window.addEventListener('error', function(e) {
       });
       list.appendChild(row);
     });
+
+    // ─── Final Sector (FS): 最終セクター線 → ゴール の目標タイム ───
+    // セクター線が1本以上ある（=最終区間が存在する）場合のみ表示
+    if (c.sections.length >= 1) {
+      const fsRow = document.createElement('div');
+      fsRow.className = 'section-edit-row';
+      const fsText = c.finalSectorTargetMs != null ? formatNumericDisplay(c.finalSectorTargetMs) : '';
+      fsRow.innerHTML = `
+        <span class="name" style="color:#ffb000;">FS</span>
+        <input class="target" type="text" inputmode="numeric" placeholder="MMSS.CC" value="${fsText}" />
+        <span style="width:54px;flex-shrink:0;"></span>
+      `;
+      const fsInp = fsRow.querySelector('input.target');
+      fsInp.addEventListener('input', () => {
+        if (!fsInp.value.trim()) { fsInp.classList.remove('valid', 'invalid'); return; }
+        const ms = parseTargetTime(fsInp.value);
+        fsInp.classList.toggle('valid',   ms != null);
+        fsInp.classList.toggle('invalid', ms == null);
+      });
+      fsInp.addEventListener('blur', () => {
+        if (!fsInp.value.trim()) {
+          c.finalSectorTargetMs = null;
+          fsInp.classList.remove('valid', 'invalid');
+          return;
+        }
+        const ms = parseTargetTime(fsInp.value);
+        if (ms != null) {
+          c.finalSectorTargetMs = ms;
+          fsInp.value = formatNumericDisplay(ms);
+          fsInp.classList.add('valid');
+          fsInp.classList.remove('invalid');
+        } else {
+          fsInp.classList.add('invalid');
+        }
+      });
+      list.appendChild(fsRow);
+    }
   }
 
   // ============================================================
@@ -2676,21 +2720,34 @@ window.addEventListener('error', function(e) {
         const timeStr = formatTime(elapsed);
         document.getElementById('current-lap-time').textContent = timeStr;
 
-        // toNextSector: target Δ for current section
+        // toNextSector: セクター経過時間（カウントアップ） + 目標との差分（小数点以下なし）
         if (c && c.sections && state.currentSectorIdx < c.sections.length) {
           const sec = c.sections[state.currentSectorIdx];
           const sectionElapsed = now - (state.sectionStartT || state.lapStartT);
           const ns = document.getElementById('next-sector-value');
           if (sec.targetMs != null) {
             const d = sectionElapsed - sec.targetMs;
-            ns.textContent = `${formatDelta(d)}  / ${sec.name}`;
+            // 経過時間 + 差分（差分は小数点以下を切り捨て = 秒単位）
+            ns.textContent = `${sec.name} ${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
             ns.className = 'ns-value ' + (d < 0 ? 'faster' : 'slower');
           } else {
-            ns.textContent = `${formatTime(sectionElapsed)}  / ${sec.name}`;
+            ns.textContent = `${sec.name} ${formatTime(sectionElapsed)}`;
+            ns.className = 'ns-value';
+          }
+        } else if (c && c.sections && c.sections.length > 0) {
+          // 最終区間 (FS: 最後のセクター線 → ゴール)
+          const ns = document.getElementById('next-sector-value');
+          const sectionElapsed = now - (state.sectionStartT || state.lapStartT);
+          if (c.finalSectorTargetMs != null) {
+            const d = sectionElapsed - c.finalSectorTargetMs;
+            ns.textContent = `FS ${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
+            ns.className = 'ns-value ' + (d < 0 ? 'faster' : 'slower');
+          } else {
+            ns.textContent = `FS ${formatTime(sectionElapsed)}`;
             ns.className = 'ns-value';
           }
         } else {
-          // Past last section or no sections
+          // セクションなし → ラップ全体の経過時間
           document.getElementById('next-sector-value').textContent = formatTime(elapsed);
           document.getElementById('next-sector-value').className = 'ns-value';
         }
@@ -2712,9 +2769,9 @@ window.addEventListener('error', function(e) {
         document.getElementById('now-sector-num').textContent =
           String(Math.min(state.currentSectorIdx + 1, (c?.sections?.length ?? 0) + 1));
       } else if (state.driveActive && c?.sections?.length > 0 && c.sections[0].targetMs != null) {
-        // Pre-start: show first section target
+        // Pre-start: show first section target (目標ラベルなし)
         const ns = document.getElementById('next-sector-value');
-        ns.textContent = `S1 目標 ${formatTime(c.sections[0].targetMs)}`;
+        ns.textContent = `${c.sections[0].name} ${formatTime(c.sections[0].targetMs)}`;
         ns.className = 'ns-value';
       }
 
@@ -3798,7 +3855,7 @@ body.pta-ls-on #screen-drive .drive-main{visibility:hidden;pointer-events:none;}
       s('pta-ls-lap',    g('lap-count'));
       s('pta-ls-seclbl', 'SECTOR ' + g('now-sector-num'));
       s('pta-ls-timer',  fmt2(g('current-lap-time')));
-      s('pta-ls-nsval',  fmt2(g('next-sector-value')));
+      s('pta-ls-nsval',  g('next-sector-value'));
       s('pta-ls-fin',    fmt2(g('finish-countdown')));
       s('pta-ls-rec',    fmt2(g('best-lap-time')));
       s('pta-ls-lst',    fmt2(g('last-lap-time')));
