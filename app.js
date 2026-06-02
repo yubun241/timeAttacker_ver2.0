@@ -2158,7 +2158,7 @@ window.addEventListener('error', function(e) {
       fsRow.innerHTML = `
         <span class="name" style="color:#ffb000;">FS</span>
         <input class="target" type="text" inputmode="numeric" placeholder="MMSS.CC" value="${fsText}" />
-        <span style="width:54px;flex-shrink:0;"></span>
+        <button class="del" style="visibility:hidden;" tabindex="-1">削除</button>
       `;
       const fsInp = fsRow.querySelector('input.target');
       fsInp.addEventListener('input', () => {
