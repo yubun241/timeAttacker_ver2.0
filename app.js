@@ -2727,23 +2727,22 @@ window.addEventListener('error', function(e) {
           const ns = document.getElementById('next-sector-value');
           if (sec.targetMs != null) {
             const d = sectionElapsed - sec.targetMs;
-            // 経過時間 + 差分（差分は小数点以下を切り捨て = 秒単位）
-            ns.textContent = `${sec.name} ${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
+            ns.textContent = `${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
             ns.className = 'ns-value ' + (d < 0 ? 'faster' : 'slower');
           } else {
-            ns.textContent = `${sec.name} ${formatTime(sectionElapsed)}`;
+            ns.textContent = formatTime(sectionElapsed);
             ns.className = 'ns-value';
           }
         } else if (c && c.sections && c.sections.length > 0) {
-          // 最終区間 (FS: 最後のセクター線 → ゴール)
+          // 最終区間 (FS)
           const ns = document.getElementById('next-sector-value');
           const sectionElapsed = now - (state.sectionStartT || state.lapStartT);
           if (c.finalSectorTargetMs != null) {
             const d = sectionElapsed - c.finalSectorTargetMs;
-            ns.textContent = `FS ${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
+            ns.textContent = `${formatTime(sectionElapsed)}  ${formatDeltaNoMs(d)}`;
             ns.className = 'ns-value ' + (d < 0 ? 'faster' : 'slower');
           } else {
-            ns.textContent = `FS ${formatTime(sectionElapsed)}`;
+            ns.textContent = formatTime(sectionElapsed);
             ns.className = 'ns-value';
           }
         } else {
@@ -2771,7 +2770,7 @@ window.addEventListener('error', function(e) {
       } else if (state.driveActive && c?.sections?.length > 0 && c.sections[0].targetMs != null) {
         // Pre-start: show first section target (目標ラベルなし)
         const ns = document.getElementById('next-sector-value');
-        ns.textContent = `${c.sections[0].name} ${formatTime(c.sections[0].targetMs)}`;
+        ns.textContent = formatTime(c.sections[0].targetMs);
         ns.className = 'ns-value';
       }
 
