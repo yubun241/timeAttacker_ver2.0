@@ -24,7 +24,7 @@
     rel="stylesheet"
   />
 
-  <link rel="stylesheet" href="styles.css?v=2.3.2" />
+  <link rel="stylesheet" href="styles.css?v=2.4.0" />
 </head>
 <body>
 
@@ -349,6 +349,12 @@ so inaccuracies may occur depending on the environment.</div>
           <div id="metric-chips" class="chip-row"></div>
         </div>
 
+        <!-- セクター区間選択 -->
+        <div class="control-row">
+          <div class="control-label">区間</div>
+          <div id="sector-chips" class="chip-row"></div>
+        </div>
+
         <!-- ラップ選択（複数選択可） -->
         <div class="control-row">
           <div class="control-label">ラップ</div>
@@ -362,6 +368,11 @@ so inaccuracies may occur depending on the environment.</div>
           <span id="legend-min" class="legend-tick">--</span>
           <span id="legend-max" class="legend-tick">--</span>
         </div>
+      </div>
+
+      <!-- 時系列グラフ -->
+      <div class="analysis-graph-wrap">
+        <canvas id="analysis-graph" class="analysis-graph"></canvas>
       </div>
 
       <!-- ラップ一覧 -->
@@ -575,6 +586,6 @@ so inaccuracies may occur depending on the environment.</div>
     crossorigin=""
   ></script>
 
-  <script src="app.js?v=2.3.2"></script>
+  <script src="app.js?v=2.4.0"></script>
 </body>
 </html>

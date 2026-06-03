@@ -1001,6 +1001,7 @@ window.addEventListener('error', function(e) {
     { key: 'speed',    label: 'SPEED',    col: 4,  unit: 'km/h', requiresObd: false, abs: false },
     { key: 'lat_g',    label: '横G',      col: 7,  unit: 'G',    requiresObd: false, abs: true  },
     { key: 'lon_g',    label: '前後G',    col: 8,  unit: 'G',    requiresObd: false, abs: true  },
+    { key: 'combined_g', label: '合成G',  col: -1, unit: 'G',    requiresObd: false, abs: false, combined: true },
     { key: 'rpm',      label: '回転数',   col: 9,  unit: 'rpm',  requiresObd: true,  abs: false },
     { key: 'throttle', label: 'スロットル', col: 13, unit: '%',  requiresObd: true,  abs: false },
     { key: 'coolant',  label: '水温',     col: 10, unit: '°C',   requiresObd: true,  abs: false },
@@ -1019,6 +1020,7 @@ window.addEventListener('error', function(e) {
     sessionId:    null,
     metric:       'speed',     // 選択中のメトリック
     selectedLaps: [],          // 表示中ラップ番号の配列
+    selectedSector: 'all',     // 'all' | 1 | 2 | ... | 'fs'（区間フィルタ）
     map:          null,
     layers:       [],          // 描画したレイヤー配列（クリア用）
   };
@@ -1032,6 +1034,7 @@ window.addEventListener('error', function(e) {
     }
     _currentSessionId = sessionId;
     analysis.sessionId = sessionId;
+    analysis.selectedSector = 'all';   // 区間選択を初期化
 
     // サマリ
     document.getElementById('session-course-name').textContent = s.courseName || '--';
@@ -1069,12 +1072,13 @@ window.addEventListener('error', function(e) {
     }
 
     renderMetricChips(s);
+    renderSectorChips(s);
     renderLapChips(s);
     renderSessionLapList(s);
 
     showScreen('session');
     // マップは画面表示後にサイズ計算する必要あり
-    setTimeout(() => initSessionMap(s), 50);
+    setTimeout(() => { initSessionMap(s); drawTimeSeriesGraph(s); }, 50);
   }
 
   // ── メトリック選択チップを描画 ───────────────────
@@ -1091,8 +1095,138 @@ window.addEventListener('error', function(e) {
         analysis.metric = m.key;
         renderMetricChips(s);
         drawAnalysis(s);
+        drawTimeSeriesGraph(s);
       });
       wrap.appendChild(chip);
+    });
+  }
+
+  // ── セクター区間選択チップを描画 ───────────────────
+  // ALL / セクター1 / セクター2 / ... / FS（最終区間）
+  function renderSectorChips(s) {
+    const wrap = document.getElementById('sector-chips');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    // CSV の r[6]（区間番号）の最大値 = 区間総数
+    let maxSector = 1;
+    for (const r of s.rows) {
+      const si = parseInt(r[6], 10);
+      if (isFinite(si) && si > maxSector) maxSector = si;
+    }
+
+    const addChip = (label, value, color) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (analysis.selectedSector === value ? ' active' : '');
+      chip.textContent = label;
+      if (color && analysis.selectedSector === value) chip.style.borderColor = color;
+      chip.addEventListener('click', () => {
+        analysis.selectedSector = value;
+        renderSectorChips(s);
+        drawAnalysis(s);
+        drawTimeSeriesGraph(s);
+      });
+      wrap.appendChild(chip);
+    };
+
+    addChip('ALL', 'all');
+    if (maxSector >= 2) {
+      // 区間1〜(maxSector-1) はセクター、最後はFS
+      for (let i = 1; i < maxSector; i++) {
+        addChip('セクター' + i, i, LAP_COLORS[(i - 1) % LAP_COLORS.length]);
+      }
+      addChip('FS', maxSector, '#ffb000');
+    } else {
+      addChip('セクター1', 1, LAP_COLORS[0]);
+    }
+  }
+
+  // ── 時系列グラフ描画（選択メトリック × 選択区間） ─────────
+  function drawTimeSeriesGraph(s) {
+    const canvas = document.getElementById('analysis-graph');
+    if (!canvas) return;
+    const metricDef = METRICS.find(m => m.key === analysis.metric);
+    if (!metricDef) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const W = Math.max(rect.width, 100);
+    const H = Math.max(rect.height, 80);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0d1018';
+    ctx.fillRect(0, 0, W, H);
+
+    const padL = 38, padR = 10, padT = 14, padB = 22;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+
+    const laps = (analysis.selectedLaps.length > 0) ? analysis.selectedLaps : [-1];
+
+    const series = [];
+    let vMin = Infinity, vMax = -Infinity;
+    laps.forEach(lapNum => {
+      const pts = extractLapPoints(s, lapNum, metricDef.col, analysis.selectedSector);
+      const vals = pts.map(p => {
+        if (p.v == null || !isFinite(p.v)) return null;
+        return metricDef.abs ? Math.abs(p.v) : p.v;
+      });
+      vals.forEach(v => { if (v != null) { if (v < vMin) vMin = v; if (v > vMax) vMax = v; } });
+      series.push({ lapNum, vals });
+    });
+
+    if (!isFinite(vMin) || !isFinite(vMax)) {
+      ctx.fillStyle = '#5a6472';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('データなし', W / 2, H / 2);
+      return;
+    }
+    if (vMin === vMax) { vMin -= 1; vMax += 1; }
+    const padv = (vMax - vMin) * 0.1;
+    vMin -= padv; vMax += padv;
+    const vSpan = vMax - vMin;
+
+    ctx.strokeStyle = '#1c2230';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#5a6472';
+    ctx.font = '10px "IBM Plex Mono",monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const yTicks = 4;
+    for (let i = 0; i <= yTicks; i++) {
+      const y = padT + (plotH * i / yTicks);
+      const val = vMax - (vSpan * i / yTicks);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.fillText(val.toFixed(val >= 100 ? 0 : 1), padL - 4, y);
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#7a8499';
+    ctx.fillText(metricDef.unit, 2, 2);
+
+    series.forEach(({ lapNum, vals }) => {
+      const n = vals.length;
+      if (n < 2) return;
+      const colorIdx = (lapNum === -1) ? 1 : ((lapNum - 1) % LAP_COLORS.length);
+      ctx.strokeStyle = LAP_COLORS[colorIdx];
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      let started = false;
+      vals.forEach((v, i) => {
+        if (v == null) { started = false; return; }
+        const x = padL + (plotW * i / (n - 1));
+        const y = padT + plotH * (1 - (v - vMin) / vSpan);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
     });
   }
 
@@ -1126,6 +1260,7 @@ window.addEventListener('error', function(e) {
         renderLapChips(s);
         renderSessionLapList(s);
         drawAnalysis(s);
+        drawTimeSeriesGraph(s);
       });
       wrap.appendChild(chip);
     });
@@ -1220,19 +1355,32 @@ window.addEventListener('error', function(e) {
 
   // ラップ行をフィルタ + lat/lon/value 抽出
   // lapNum === -1 で「全行」を返す（P2P / 未完走セッション用）
-  function extractLapPoints(s, lapNum, col) {
+  // metricCol: 通常は列番号。-1 = 合成G（横G・前後Gから計算）
+  // sectorFilter: 'all' | 数値（区間番号 r[6]）で区間フィルタ
+  function extractLapPoints(s, lapNum, metricCol, sectorFilter) {
     const pts = [];
     const isAll = (lapNum === -1);
     // state.lapNumber は finalizeLap 後に +1 されるため
     // ラップ N の走行行は r[5] = N-1 で記録されている
     const rowLap = isAll ? -1 : (lapNum - 1);
+    const secF = (sectorFilter == null || sectorFilter === 'all') ? null : sectorFilter;
+    const isCombined = (metricCol === -1);
     for (const r of s.rows) {
       if (!isAll && parseInt(r[5], 10) !== rowLap) continue;
+      // セクター区間フィルタ（r[6] = currentSectorIdx + 1）
+      if (secF != null && parseInt(r[6], 10) !== secF) continue;
       const lat = parseFloat(r[1]);
       const lon = parseFloat(r[2]);
       if (!isFinite(lat) || !isFinite(lon)) continue;
-      const rawV = r[col];
-      const v = (rawV === '' || rawV == null) ? null : parseFloat(rawV);
+      let v;
+      if (isCombined) {
+        // 合成G = √(横G² + 前後G²)
+        const lg = parseFloat(r[7]), fg = parseFloat(r[8]);
+        v = (isFinite(lg) && isFinite(fg)) ? Math.sqrt(lg * lg + fg * fg) : null;
+      } else {
+        const rawV = r[metricCol];
+        v = (rawV === '' || rawV == null) ? null : parseFloat(rawV);
+      }
       pts.push({ lat, lon, v });
     }
     return pts;
@@ -1241,7 +1389,7 @@ window.addEventListener('error', function(e) {
   function computeMetricRange(s, lapNums, metricDef) {
     let min = Infinity, max = -Infinity;
     for (const lapNum of lapNums) {
-      const pts = extractLapPoints(s, lapNum, metricDef.col);
+      const pts = extractLapPoints(s, lapNum, metricDef.col, analysis.selectedSector);
       for (const p of pts) {
         if (p.v == null || !isFinite(p.v)) continue;
         const v = metricDef.abs ? Math.abs(p.v) : p.v;
@@ -1282,7 +1430,7 @@ window.addEventListener('error', function(e) {
 
   // 単一ラップをグラデーション着色（小区間ごとに色を変える）
   function drawLapGradient(s, lapNum, metricDef, range) {
-    const pts = extractLapPoints(s, lapNum, metricDef.col);
+    const pts = extractLapPoints(s, lapNum, metricDef.col, analysis.selectedSector);
     if (pts.length < 2) return;
     const span = (range.max - range.min) || 1;
 
@@ -1312,7 +1460,7 @@ window.addEventListener('error', function(e) {
 
   // 複数ラップ: 単色 polyline
   function drawLapSolid(s, lapNum, color) {
-    const pts = extractLapPoints(s, lapNum, 4);
+    const pts = extractLapPoints(s, lapNum, 4, analysis.selectedSector);
     if (pts.length < 2) return;
     const latlngs = pts.map(p => [p.lat, p.lon]);
     const line = L.polyline(latlngs, {
@@ -3440,6 +3588,21 @@ window.addEventListener('error', function(e) {
 }
 /* G-ball 枠内の数値テキストを非表示（スライダー横に統一） */
 .gball-cell #g-text { display: none !important; }
+
+/* 時系列グラフ */
+.analysis-graph-wrap {
+  margin: 10px 0;
+  padding: 0;
+  background: #0d1018;
+  border: 1px solid #1c2230;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.analysis-graph {
+  display: block;
+  width: 100%;
+  height: 180px;
+}
 .map-gball-row .sensors-row {
   flex: 0 0 auto;
   width: 38%;
