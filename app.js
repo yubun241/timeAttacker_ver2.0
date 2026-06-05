@@ -1021,6 +1021,7 @@ window.addEventListener('error', function(e) {
     metric:       'speed',     // 選択中のメトリック
     selectedLaps: [],          // 表示中ラップ番号の配列
     selectedSector: 'all',     // 'all' | 1 | 2 | ... | 'fs'（区間フィルタ）
+    compareSessions: [],       // 比較対象セッションIDの配列（同コースの別走行）
     map:          null,
     layers:       [],          // 描画したレイヤー配列（クリア用）
   };
@@ -1035,6 +1036,7 @@ window.addEventListener('error', function(e) {
     _currentSessionId = sessionId;
     analysis.sessionId = sessionId;
     analysis.selectedSector = 'all';   // 区間選択を初期化
+    analysis.compareSessions = [];     // 比較走行を初期化
 
     // サマリ
     document.getElementById('session-course-name').textContent = s.courseName || '--';
@@ -1073,12 +1075,16 @@ window.addEventListener('error', function(e) {
 
     renderMetricChips(s);
     renderSectorChips(s);
+    renderCompareChips(s);
     renderLapChips(s);
     renderSessionLapList(s);
 
     showScreen('session');
     // マップは画面表示後にサイズ計算する必要あり
     setTimeout(() => { initSessionMap(s); drawTimeSeriesGraph(s); }, 50);
+    setTimeout(() => drawTimeSeriesGraph(s), 300);
+    setTimeout(() => drawTimeSeriesGraph(s), 250);
+    setTimeout(() => drawTimeSeriesGraph(s), 600);
   }
 
   // ── メトリック選択チップを描画 ───────────────────
@@ -1141,7 +1147,50 @@ window.addEventListener('error', function(e) {
     }
   }
 
-  // ── 時系列グラフ描画（選択メトリック × 選択区間） ─────────
+  // ── 比較走行チップ（同コースの別走行を日付で選択） ──────
+  function renderCompareChips(s) {
+    const wrap = document.getElementById('compare-chips');
+    const row = document.getElementById('compare-row');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    // 同じコースの他セッション（自分以外）を新しい順に
+    const sessions = loadSessions();
+    const sameCourse = sessions
+      .filter(x => x.courseName === s.courseName && x.id !== s.id)
+      .sort((a, b) => b.startTime - a.startTime);
+
+    // 比較対象が無ければ行ごと非表示
+    if (sameCourse.length === 0) {
+      if (row) row.style.display = 'none';
+      return;
+    }
+    if (row) row.style.display = '';
+
+    sameCourse.forEach((other, i) => {
+      const isSel = analysis.compareSessions.includes(other.id);
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (isSel ? ' active' : '');
+      // 日付（M/D HH:MM）でラベル
+      const d = new Date(other.startTime);
+      const label = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      chip.textContent = label;
+      // 比較走行の色（メインと被らないようオフセット）
+      const cmpColor = LAP_COLORS[(i + 3) % LAP_COLORS.length];
+      if (isSel) chip.style.borderColor = cmpColor;
+      chip.addEventListener('click', () => {
+        const idx = analysis.compareSessions.indexOf(other.id);
+        if (idx >= 0) analysis.compareSessions.splice(idx, 1);
+        else analysis.compareSessions.push(other.id);
+        renderCompareChips(s);
+        drawAnalysis(s);
+        drawTimeSeriesGraph(s);
+      });
+      wrap.appendChild(chip);
+    });
+  }
+
+
   function drawTimeSeriesGraph(s) {
     const canvas = document.getElementById('analysis-graph');
     if (!canvas) return;
@@ -1150,6 +1199,8 @@ window.addEventListener('error', function(e) {
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+    // レイアウト未確定で幅が取れない時はスキップ（後続の再描画に任せる）
+    if (rect.width < 50) return;
     const W = Math.max(rect.width, 100);
     const H = Math.max(rect.height, 80);
     canvas.width = Math.round(W * dpr);
@@ -1175,8 +1226,29 @@ window.addEventListener('error', function(e) {
         return metricDef.abs ? Math.abs(p.v) : p.v;
       });
       vals.forEach(v => { if (v != null) { if (v < vMin) vMin = v; if (v > vMax) vMax = v; } });
-      series.push({ lapNum, vals });
+      series.push({ color: LAP_COLORS[(lapNum === -1 ? 1 : (lapNum - 1)) % LAP_COLORS.length], vals });
     });
+
+    // 比較走行（同コースの別走行）を折れ線で重ねる
+    if (analysis.compareSessions.length > 0 && !metricDef.requiresObd) {
+      const sessions = loadSessions();
+      const sameCourse = sessions
+        .filter(x => x.courseName === s.courseName && x.id !== s.id)
+        .sort((a, b) => b.startTime - a.startTime);
+      analysis.compareSessions.forEach(cmpId => {
+        const cmp = sessions.find(x => x.id === cmpId);
+        if (!cmp) return;
+        const ci = sameCourse.findIndex(x => x.id === cmpId);
+        const color = LAP_COLORS[(ci + 3) % LAP_COLORS.length];
+        const pts = extractLapPoints(cmp, -1, metricDef.col, analysis.selectedSector);
+        const vals = pts.map(p => {
+          if (p.v == null || !isFinite(p.v)) return null;
+          return metricDef.abs ? Math.abs(p.v) : p.v;
+        });
+        vals.forEach(v => { if (v != null) { if (v < vMin) vMin = v; if (v > vMax) vMax = v; } });
+        series.push({ color, vals, dashed: true });
+      });
+    }
 
     if (!isFinite(vMin) || !isFinite(vMax)) {
       ctx.fillStyle = '#5a6472';
@@ -1209,14 +1281,14 @@ window.addEventListener('error', function(e) {
     ctx.fillStyle = '#7a8499';
     ctx.fillText(metricDef.unit, 2, 2);
 
-    series.forEach(({ lapNum, vals }) => {
+    series.forEach(({ color, vals, dashed }) => {
       const n = vals.length;
       if (n < 2) return;
-      const colorIdx = (lapNum === -1) ? 1 : ((lapNum - 1) % LAP_COLORS.length);
-      ctx.strokeStyle = LAP_COLORS[colorIdx];
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      ctx.setLineDash(dashed ? [4, 4] : []);
       ctx.beginPath();
       let started = false;
       vals.forEach((v, i) => {
@@ -1228,6 +1300,7 @@ window.addEventListener('error', function(e) {
       });
       ctx.stroke();
     });
+    ctx.setLineDash([]);
   }
 
   // ── ラップ選択チップを描画 ───────────────────────
@@ -1350,6 +1423,30 @@ window.addEventListener('error', function(e) {
       const range = computeMetricRange(s, [lapNum], metricDef);
       drawLapGradient(s, lapNum, metricDef, range);
       updateLegend(range.min, range.max, metricDef.unit);
+    }
+
+    // ── 比較走行（同コースの別走行）を別色のソリッド線で重ねる ──
+    if (analysis.compareSessions.length > 0) {
+      const sessions = loadSessions();
+      const sameCourse = sessions
+        .filter(x => x.courseName === s.courseName && x.id !== s.id)
+        .sort((a, b) => b.startTime - a.startTime);
+      analysis.compareSessions.forEach(cmpId => {
+        const cmp = sessions.find(x => x.id === cmpId);
+        if (!cmp) return;
+        const i = sameCourse.findIndex(x => x.id === cmpId);
+        const color = LAP_COLORS[(i + 3) % LAP_COLORS.length];
+        // 比較走行は全ラップ(-1)を対象に、選択中の区間でフィルタ
+        const pts = extractLapPoints(cmp, -1, 4, analysis.selectedSector);
+        if (pts.length >= 2) {
+          const latlngs = pts.map(p => [p.lat, p.lon]);
+          const line = L.polyline(latlngs, {
+            color, weight: 3, opacity: 0.65, dashArray: '4,4',
+            lineJoin: 'round', lineCap: 'round',
+          }).addTo(analysis.map);
+          analysis.layers.push(line);
+        }
+      });
     }
   }
 
@@ -1516,6 +1613,22 @@ window.addEventListener('error', function(e) {
     }
     showScreen('history');
   });
+
+  // グラフ canvas のサイズ変化を監視して再描画
+  (function () {
+    const gc = document.getElementById('analysis-graph');
+    if (gc && typeof ResizeObserver !== 'undefined') {
+      let _t = null;
+      new ResizeObserver(() => {
+        clearTimeout(_t);
+        _t = setTimeout(() => {
+          if (!analysis.sessionId) return;
+          const sess = loadSessions().find(x => x.id === analysis.sessionId);
+          if (sess) drawTimeSeriesGraph(sess);
+        }, 60);
+      }).observe(gc);
+    }
+  })();
 
   // CSV エクスポート
   document.getElementById('btn-session-export').addEventListener('click', () => {
@@ -3597,12 +3710,18 @@ window.addEventListener('error', function(e) {
   border: 1px solid #1c2230;
   border-radius: 10px;
   overflow: hidden;
+  flex-shrink: 0 !important;
+  height: 190px;
 }
 .analysis-graph {
   display: block;
   width: 100%;
-  height: 180px;
+  height: 190px;
 }
+/* session 画面の各セクションが flex で圧縮されないように */
+.session-main > * { flex-shrink: 0 !important; }
+.analysis-map-wrap { flex-shrink: 0 !important; height: 240px; }
+.analysis-map { height: 100% !important; }
 .map-gball-row .sensors-row {
   flex: 0 0 auto;
   width: 38%;
