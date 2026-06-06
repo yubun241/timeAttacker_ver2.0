@@ -999,6 +999,7 @@ window.addEventListener('error', function(e) {
   //             9=rpm 10=coolant 11=oilTemp 12=intake 13=throttle
   const METRICS = [
     { key: 'speed',    label: 'SPEED',    col: 4,  unit: 'km/h', requiresObd: false, abs: false },
+    { key: 'line',     label: 'ライン',   col: -2, unit: '',     requiresObd: false, abs: false, lineMode: true },
     { key: 'lat_g',    label: '横G',      col: 7,  unit: 'G',    requiresObd: false, abs: true  },
     { key: 'lon_g',    label: '前後G',    col: 8,  unit: 'G',    requiresObd: false, abs: true  },
     { key: 'combined_g', label: '合成G',  col: -1, unit: 'G',    requiresObd: false, abs: false, combined: true },
@@ -1137,13 +1138,12 @@ window.addEventListener('error', function(e) {
 
     addChip('ALL', 'all');
     if (maxSector >= 2) {
-      // 区間1〜(maxSector-1) はセクター、最後はFS
-      for (let i = 1; i < maxSector; i++) {
-        addChip('セクター' + i, i, LAP_COLORS[(i - 1) % LAP_COLORS.length]);
+      // 区間1〜(maxSector-1): 番号のみ表示（計測画面の SECTOR N と統一）
+      for (let i = 1; i <= maxSector; i++) {
+        addChip('SECTOR ' + i, i, LAP_COLORS[(i - 1) % LAP_COLORS.length]);
       }
-      addChip('FS', maxSector, '#ffb000');
     } else {
-      addChip('セクター1', 1, LAP_COLORS[0]);
+      addChip('SECTOR 1', 1, LAP_COLORS[0]);
     }
   }
 
@@ -1210,6 +1210,16 @@ window.addEventListener('error', function(e) {
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#0d1018';
     ctx.fillRect(0, 0, W, H);
+
+    // ライン取り比較モードはグラフ非対象 → 案内表示
+    if (metricDef.lineMode) {
+      ctx.fillStyle = '#5a6472';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('地図で走行ライン取りを比較中', W / 2, H / 2);
+      return;
+    }
 
     const padL = 38, padR = 10, padT = 14, padB = 22;
     const plotW = W - padL - padR;
@@ -1281,14 +1291,13 @@ window.addEventListener('error', function(e) {
     ctx.fillStyle = '#7a8499';
     ctx.fillText(metricDef.unit, 2, 2);
 
-    series.forEach(({ color, vals, dashed }) => {
+    series.forEach(({ color, vals }) => {
       const n = vals.length;
       if (n < 2) return;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.setLineDash(dashed ? [4, 4] : []);
       ctx.beginPath();
       let started = false;
       vals.forEach((v, i) => {
@@ -1300,7 +1309,6 @@ window.addEventListener('error', function(e) {
       });
       ctx.stroke();
     });
-    ctx.setLineDash([]);
   }
 
   // ── ラップ選択チップを描画 ───────────────────────
@@ -1407,7 +1415,22 @@ window.addEventListener('error', function(e) {
     const isMulti = analysis.selectedLaps.length > 1;
     const metricDef = METRICS.find(m => m.key === analysis.metric);
 
-    if (isMulti) {
+    if (metricDef && metricDef.lineMode) {
+      // ── ライン取り比較モード: メイン走行を単色ソリッドで描画 ──
+      const mainLap = analysis.selectedLaps.length === 1 ? analysis.selectedLaps[0] : -1;
+      const mainPts = extractLapPoints(s, mainLap, 4, analysis.selectedSector);
+      if (mainPts.length >= 2) {
+        const line = L.polyline(mainPts.map(p => [p.lat, p.lon]), {
+          color: '#00d4ff', weight: 4, opacity: 0.95, lineJoin: 'round', lineCap: 'round',
+        }).addTo(analysis.map);
+        analysis.layers.push(line);
+        // 始点(緑)・終点(赤)マーカー
+        const sp = mainPts[0], ep = mainPts[mainPts.length - 1];
+        analysis.layers.push(L.circleMarker([sp.lat, sp.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#22e54a', fillOpacity: 1 }).addTo(analysis.map));
+        analysis.layers.push(L.circleMarker([ep.lat, ep.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#ff3b30', fillOpacity: 1 }).addTo(analysis.map));
+      }
+      updateLegendLineMode();
+    } else if (isMulti) {
       // 複数ラップ: 各ラップを別色でベタ塗り
       analysis.selectedLaps.forEach(lapNum => {
         const colorIdx = (lapNum - 1) % LAP_COLORS.length;
@@ -1425,8 +1448,9 @@ window.addEventListener('error', function(e) {
       updateLegend(range.min, range.max, metricDef.unit);
     }
 
-    // ── 比較走行（同コースの別走行）を別色のソリッド線で重ねる ──
+    // ── 比較走行（同コースの別走行）を別色で重ねる ──
     if (analysis.compareSessions.length > 0) {
+      const isLineMode = metricDef && metricDef.lineMode;
       const sessions = loadSessions();
       const sameCourse = sessions
         .filter(x => x.courseName === s.courseName && x.id !== s.id)
@@ -1436,18 +1460,29 @@ window.addEventListener('error', function(e) {
         if (!cmp) return;
         const i = sameCourse.findIndex(x => x.id === cmpId);
         const color = LAP_COLORS[(i + 3) % LAP_COLORS.length];
-        // 比較走行は全ラップ(-1)を対象に、選択中の区間でフィルタ
         const pts = extractLapPoints(cmp, -1, 4, analysis.selectedSector);
         if (pts.length >= 2) {
           const latlngs = pts.map(p => [p.lat, p.lon]);
           const line = L.polyline(latlngs, {
-            color, weight: 3, opacity: 0.65, dashArray: '4,4',
+            color,
+            weight: isLineMode ? 3.5 : 3,
+            opacity: isLineMode ? 0.9 : 0.75,
             lineJoin: 'round', lineCap: 'round',
           }).addTo(analysis.map);
           analysis.layers.push(line);
         }
       });
     }
+  }
+
+  // ライン取りモード用の凡例（走行の色対応を表示）
+  function updateLegendLineMode() {
+    const grad = document.getElementById('legend-gradient');
+    const minEl = document.getElementById('legend-min');
+    const maxEl = document.getElementById('legend-max');
+    if (grad) grad.style.background = 'linear-gradient(90deg,#00d4ff,#00d4ff)';
+    if (minEl) minEl.textContent = '今回';
+    if (maxEl) maxEl.textContent = (analysis.compareSessions.length > 0) ? '＋比較走行' : '';
   }
 
   // ラップ行をフィルタ + lat/lon/value 抽出
