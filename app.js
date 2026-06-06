@@ -2445,14 +2445,16 @@ window.addEventListener('error', function(e) {
       list.appendChild(row);
     });
 
-    // ─── Final Sector (FS): 最終セクター線 → ゴール の目標タイム ───
-    // セクター線が1本以上ある（=最終区間が存在する）場合のみ表示
-    if (c.sections.length >= 1) {
+    // ─── 最終区間: 最後のセクター線 → ゴール の目標タイム ───
+    // セクター設定がなければ S1、あれば S(n+1) と連番表示
+    // スタート線があるコース（=コース定義済み）で常に表示
+    if (c.startLine) {
+      const fsLabel = 'S' + (c.sections.length + 1);
       const fsRow = document.createElement('div');
       fsRow.className = 'section-edit-row';
       const fsText = c.finalSectorTargetMs != null ? formatNumericDisplay(c.finalSectorTargetMs) : '';
       fsRow.innerHTML = `
-        <span class="name" style="color:#ffb000;">FS</span>
+        <span class="name" style="color:#4fc3f7;">${fsLabel}</span>
         <input class="target" type="text" inputmode="numeric" placeholder="MMSS.CC" value="${fsText}" />
         <button class="del" style="visibility:hidden;" tabindex="-1">削除</button>
       `;
