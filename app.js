@@ -2940,38 +2940,54 @@ window.addEventListener('error', function(e) {
   function renderSplitsGrid() {
     const c = getActiveCourse();
     const grid = document.getElementById('splits-grid');
-    if (!c || !c.sections || c.sections.length === 0) {
-      grid.innerHTML = '<div class="splits-empty">セクター未設定</div>';
+    if (!c || !c.startLine) {
+      grid.innerHTML = '<div class="splits-empty">コース未設定</div>';
       return;
     }
     grid.innerHTML = '';
-    c.sections.forEach((sec, idx) => {
-      const split = state.currentLapSplits.find(s => s.idx === idx);
-      const bestSplit = c.bestLap?.splits?.find(s => s.idx === idx);
+    const sections = c.sections || [];
+
+    const addItem = (idx, label, splitMs, bestMs, isLive) => {
       const item = document.createElement('div');
       item.className = 'split-item';
-      let timeText = '--:--.---';
-      let deltaText = '';
-      let deltaCls = '';
-      if (split) {
-        timeText = formatTime(split.splitMs);
-        if (bestSplit) {
-          const d = split.splitMs - bestSplit.splitMs;
+      let timeText = '--:--.---', deltaText = '', deltaCls = '';
+      if (splitMs != null) {
+        timeText = formatTime(splitMs);
+        if (bestMs != null) {
+          const d = splitMs - bestMs;
           deltaText = formatDelta(d);
           deltaCls = d < 0 ? 'faster' : 'slower';
         }
-      } else if (bestSplit) {
-        timeText = formatTime(bestSplit.splitMs);
+      } else if (bestMs != null) {
+        timeText = formatTime(bestMs);
         item.style.opacity = '0.5';
       }
-      if (idx === state.currentSectorIdx && state.lapStarted) item.classList.add('live');
+      if (isLive) item.classList.add('live');
       item.innerHTML = `
-        <span class="sname">${escapeHtml(sec.name)}</span>
+        <span class="sname">${escapeHtml(label)}</span>
         <span class="stime">${timeText}</span>
         <span class="sdelta ${deltaCls}">${deltaText}</span>
       `;
       grid.appendChild(item);
+    };
+
+    // 各セクター区間 (S1 .. Sn): ゲート通過の累積時間
+    sections.forEach((sec, idx) => {
+      const split = state.currentLapSplits.find(s => s.idx === idx);
+      const bestSplit = c.bestLap?.splits?.find(s => s.idx === idx);
+      addItem(idx, sec.name || `S${idx + 1}`,
+        split ? split.splitMs : null,
+        bestSplit ? bestSplit.splitMs : null,
+        idx === state.currentSectorIdx && state.lapStarted);
     });
+
+    // 最終区間 (S{n+1}): ゴールまでの累積時間 (= ラップ合計)
+    const fIdx = sections.length;
+    const fSplit = state.currentLapSplits.find(s => s.idx === fIdx);
+    addItem(fIdx, `S${fIdx + 1}`,
+      fSplit ? fSplit.splitMs : null,
+      (c.bestLap && c.bestLap.totalMs != null) ? c.bestLap.totalMs : null,
+      fIdx === state.currentSectorIdx && state.lapStarted);
   }
 
   // ============================================================
