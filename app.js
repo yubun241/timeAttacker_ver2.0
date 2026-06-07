@@ -3235,6 +3235,7 @@ window.addEventListener('error', function(e) {
       this.waypoints = [];   // [{lat, lon}, ...] ゲート中点 (start→sec→finish)
       this.ghostTimes = [];  // [0, split0, split1, ..., totalMs] (ms)
       this.bbox = null;      // {minLat, maxLat, minLon, maxLon, meanLat}
+      this.panX = 0; this.panY = 0;   // 現在地追従パンのオフセット
       this.resize();
       window.addEventListener('resize', () => this.resize());
     }
@@ -3264,6 +3265,7 @@ window.addEventListener('error', function(e) {
       this.waypoints = [];
       this.ghostTimes = [];
       this.routePts = null;     // OSRM 道なり経路 ([{lat, lon}, ...])
+      this.panX = 0; this.panY = 0;   // 追従パンをリセット
       if (!c) { this.bbox = null; return; }
 
       const wp = [];
@@ -3398,6 +3400,30 @@ window.addEventListener('error', function(e) {
         const _phi = Math.atan2(pts[0].y - _cy, pts[0].x - _cx);
         const _target = (this.courseType === 'circuit') ? Math.PI / 4 : 3 * Math.PI / 4;
         const _mapRot = _target - _phi + (state.mapRotOffset || 0);
+        const _cos = Math.cos(_mapRot), _sin = Math.sin(_mapRot);
+
+        // ─── 現在地追従パン: 回転後の現在地が枠の余白(20%)外に出そうなら滑らかにずらす ───
+        let _px = this.panX || 0, _py = this.panY || 0;
+        const _fix = state.prevFix;
+        if (_fix && _fix.lat != null) {
+          const _cpr = this._project(_fix.lat, (_fix.lon != null ? _fix.lon : _fix.lng), pad);
+          if (_cpr) {
+            const _dx = _cpr.x - _cx, _dy = _cpr.y - _cy;
+            const _rx = _cx + _dx * _cos - _dy * _sin;   // 回転後の現在地 X
+            const _ry = _cy + _dx * _sin + _dy * _cos;   // 回転後の現在地 Y
+            const _sx = _rx + _px, _sy = _ry + _py;      // 既存パン込みの画面座標
+            const _mX = w * 0.2, _mY = h * 0.2;
+            let _tx = _px, _ty = _py;
+            if (_sx < _mX) _tx = _px + (_mX - _sx);
+            else if (_sx > w - _mX) _tx = _px - (_sx - (w - _mX));
+            if (_sy < _mY) _ty = _py + (_mY - _sy);
+            else if (_sy > h - _mY) _ty = _py - (_sy - (h - _mY));
+            this.panX = _px + (_tx - _px) * 0.2;   // 滑らかに追従
+            this.panY = _py + (_ty - _py) * 0.2;
+            _px = this.panX; _py = this.panY;
+          }
+        }
+        ctx.translate(_px, _py);               // 追従パン (画面座標)
         ctx.translate(_cx, _cy);
         ctx.rotate(_mapRot);
         ctx.translate(-_cx, -_cy);
