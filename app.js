@@ -3723,7 +3723,7 @@ window.addEventListener('error', function(e) {
     const dt = new Date();
     const stamp = dt.toISOString().replace(/[:.]/g, '-').slice(0, 19);
     a.href = url;
-    a.download = `mirage_${(c?.name || 'session').replace(/\s+/g, '_')}_${stamp}.csv`;
+    a.download = `timeattacker_${(c?.name || 'session').replace(/\s+/g, '_')}_${stamp}.csv`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
